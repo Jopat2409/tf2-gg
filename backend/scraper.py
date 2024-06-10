@@ -1,10 +1,14 @@
-from services import TeamService, MatchService, PlayerService
+from services import test_func
+from utils import Logger
+
 import sys
 
 if __name__ == "__main__":
     args = sys.argv[1::]
+
+    Logger.init("logs", "scraper", "verbose" in args)
+
+    __logger = Logger.get_logger()
     if "rgl" in args:
-        print("Scraping RGL data")
-        MatchService.update(verbose=True)
-        TeamService.update(verbose=True)
-        PlayerService.update(verbose=True)
+        __logger.log_info("Scraping RGL data")
+        test_func()
