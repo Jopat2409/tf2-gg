@@ -5,6 +5,7 @@ from sqlalchemy import Integer, String, ForeignKey, Boolean, Float, func, event
 from utils.typing import SiteID, TfSource
 from sqlalchemy.orm import scoped_session
 from utils.logger import Logger
+from utils.decorators import cache_ids
 from typing import List
 from database import Base
 
@@ -108,40 +109,20 @@ class Player(Base):
             "avatar": self.avatar,
         }
 
+@cache_ids("team_id")
 class Team(Base):
     __tablename__ = "teams"
     team_id: Mapped[Integer] = mapped_column(Integer, primary_key=True, autoincrement=True) # Internal team ID
     rosters: Mapped[List["Roster"]] = relationship(back_populates="team", foreign_keys='Roster.team_id')
 
-    UNCOMMITTED_IDS = set()
-
     def __init__(self) -> None:
         self.team_id = int(Team.get_next_id())
-
-    @staticmethod
-    def discard_committed_ids(mapper, connection, target):
-        to_discard = []
-        for id_ in Team.UNCOMMITTED_IDS:
-            if Team.get(id_):
-                to_discard.append(id_)
-        for id_ in to_discard:
-            Team.UNCOMMITTED_IDS.remove(id_)
-
-    @staticmethod
-    def get_next_id() -> int:
-        if Team.UNCOMMITTED_IDS:
-            new_id = max(Team.UNCOMMITTED_IDS) + 1
-        else:
-            new_id = int(Team.query.with_entities(func.max(Team.team_id)).first()[0] or 0) + 1
-        Team.UNCOMMITTED_IDS.add(new_id)
-        return new_id
 
     @staticmethod
     def get(team_id: int) -> Team | None:
         return Team.query.filter(Team.team_id == int(team_id)).first() or None
 
-event.listen(Team, "after_insert", Team.discard_committed_ids)
-
+@cache_ids("roster_id")
 class Roster(Base):
     __tablename__ = "rosters"
     roster_id: Mapped[Integer] = mapped_column(ForeignKey("teams.team_id"), primary_key=True, autoincrement=True) # Internal roster id
@@ -159,6 +140,7 @@ class Roster(Base):
     updated_at: Mapped[Float] = mapped_column(Float, nullable=True)
 
     players: Mapped[List["Player"]] = relationship("RosterPlayerAssociation", back_populates="roster")
+    match_results: Mapped[List["MatchResult"]] = relationship("MatchResult")
 
     is_complete: Mapped[Boolean] = mapped_column(Boolean, default=False)
 
@@ -169,7 +151,7 @@ class Roster(Base):
                     tag: str | None = None,
                     created: float | None = None,
                     updated: float | None = None):
-
+        self.roster_id = int(Roster.get_next_id())
         if roster_id.get_source() == TfSource.RGL:
             self.rgl_team_id = roster_id.get_id()
         elif roster_id.get_source() == TfSource.ETF2L:
@@ -254,6 +236,7 @@ class Roster(Base):
     def get_incomplete() -> list[Roster]:
         return Roster.query.filter(Roster.rgl_team_id is not None, Roster.is_complete == 0)
 
+@cache_ids("match_id")
 class Match(Base):
     __tablename__ = "matches"
     match_id: Mapped[Integer] = mapped_column(Integer, primary_key=True, autoincrement=True) # Internal match ID
@@ -286,10 +269,11 @@ class Match(Base):
             TfSource.UGC: "ugc_match_id",
             TfSource.ETF2L: "etf2l_match_id"
         }
+        self.match_id = Match.get_next_id()
         setattr(self, self.ID_MAPPING[match_id.get_source()], match_id.get_id())
         self.match_epoch = epoch
         self.match_name = name
-        self.was_forfeit = forfeit
+        self.was_forfeit = bool(forfeit) if forfeit is not None else None
         self.season_id = season.get_id() if season else None
         self.division_id = division.get_id() if division else None
         self.region_id = region.get_id() if region else None
@@ -336,9 +320,16 @@ class Match(Base):
         to_update.division_id = other.division_id
         to_update.region_id = other.region_id
 
-        to_update.results = other.results
         to_update.is_complete = other.is_complete
 
+        for result in other.results:
+            #TODO: check if map result already staged
+            if not MatchResult.get(result.match_id, result.roster_id, result.map_name):
+                session.add(session.merge(result))
+            if not Roster.get(result.roster_id):
+                session.add(session.merge(result.roster))
+
+        to_update.results = other.results
         if commit:
             session.commit()
 
@@ -366,9 +357,18 @@ class Match(Base):
     def get_site_id(self) -> SiteID:
         return SiteID.rgl_id(self.rgl_match_id) if self.rgl_match_id is not None else SiteID(TfSource.UGC, self.rgl_match_id)
 
+    @staticmethod
+    def get(match_id: int) -> Match | None:
+        return Match.query.filter(Match.match_id == int(match_id)).first()
+
     def add_map(self, map_name: str, home_team: SiteID, home_score: int, away_team: SiteID, away_score: int) -> None:
-        self.results.append(MatchResult(self.match_id, home_team.get_id(), map_name, home_score))
-        self.results.append(MatchResult(self.match_id, away_team.get_id(), map_name, away_score))
+        # Get internal IDs of the home and away team
+        home_roster = Roster.get_fromsource(home_team) or Roster(home_team)
+        away_roster = Roster.get_fromsource(away_team) or Roster(away_team)
+
+        # Add to list of match results
+        self.results.append(MatchResult(self.match_id, home_roster, map_name, home_score))
+        self.results.append(MatchResult(self.match_id, away_roster, map_name, away_score))
 
     def json(self) -> dict:
         return {
@@ -379,20 +379,23 @@ class Match(Base):
         }
 
     @staticmethod
-    def get_count(league: str) -> int:
-        return Match.query.filter(Match.rgl_match_id is not None).count()
+    def get_count(league: TfSource) -> int:
+        if league == TfSource.RGL:
+            return Match.query.filter(Match.rgl_match_id is not None).count()
 
     @staticmethod
-    def get_incomplete(league: str) -> list[Match]:
-        return Match.query.filter(Match.rgl_match_id is not None, Match.is_complete == 0).all()
+    def get_incomplete(league: TfSource) -> list[Match]:
+        if league == TfSource.RGL:
+            return Match.query.filter(Match.rgl_match_id is not None, not Match.is_complete).all()
 
 
     @staticmethod
     def get_matches(team_id: int = None) -> list[Match]:
 
-        return {
-            [match.json() for match in Match.query.filter(Match.results.any(MatchResult.roster_id == int(team_id))).all()]
-        }
+        return [match.json() for match in Match.query.filter(Match.results.any(MatchResult.roster_id == int(team_id))).all()]
+
+    def __repr__(self) -> str:
+        return f"""MatchId: {self.match_id}, SourceId: {self.get_site_id()}, MatchName: {self.match_name}, Complete: {self.is_complete}"""
 
 
 class MatchResult(Base):
@@ -402,15 +405,21 @@ class MatchResult(Base):
     match: Mapped["Match"] = relationship("Match", back_populates="results")
 
     roster_id: Mapped[Integer] = mapped_column(ForeignKey("rosters.roster_id"), primary_key=True)
+    roster: Mapped["Roster"] = relationship("Roster", back_populates="match_results")
+
     map_name: Mapped[String] = mapped_column(String, primary_key=True)
 
     score: Mapped[Integer] = mapped_column(Integer)
 
-    def __init__(self, match_id: int, team_id: int, map_name: str, score: int) -> None:
+    def __init__(self, match_id: int, team: Roster, map_name: str, score: int) -> None:
         self.match_id = match_id
-        self.roster_id = team_id
+        self.roster_id = team.roster_id
+        self.roster = team
         self.map_name = map_name
         self.score = score
+
+    def get(match: int, roster: int, map_: str) -> MatchResult | None:
+        return MatchResult.query.filter(MatchResult.match_id == int(match) and MatchResult.roster_id == int(roster) and MatchResult.map_name == map_).first()
 
     def json(self) -> dict:
         return {

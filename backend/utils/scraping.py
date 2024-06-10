@@ -2,7 +2,7 @@ from typing import Any
 import requests
 import time
 from multiprocessing import Pool
-from models import Match, Roster, MatchResult
+from models import Match, Roster
 from utils.typing import TfSource, SiteID
 from utils import epoch_from_timestamp
 
@@ -101,6 +101,15 @@ class TfDataDecoder:
         for map_ in match_data.get("maps", []):
             match.add_map(map_["mapName"], SiteID.rgl_id(home_team["teamId"]), map_["homeScore"], SiteID.rgl_id(away_team["teamId"]), map_["awayScore"])
         return match
+
+    def __decode_etf2l_match(match_data: dict) -> Match:
+        match = Match(
+            SiteID.etf2l_id(match_data["id"]),
+            float(match_data.get("time", 0)) or None,
+            match_data.get("competition", {}).get("name", None),
+            match_data.get("defaultwin", None),
+            SiteID.etf2l_id(match_data.get("competition", {}).get("id", None))
+        )
 
     @staticmethod
     def decode_match(source: TfSource, match_data: dict) -> Match:

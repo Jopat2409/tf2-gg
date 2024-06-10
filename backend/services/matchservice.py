@@ -1,6 +1,6 @@
 from utils.logger import Logger
 from utils.scraping import post_request, scrape_parallel
-from utils.typing import SiteID, TfSource
+from utils.typing import SiteID, TfSource, TfDataDecoder
 
 from models import Match, MatchResult
 from database import db_session
@@ -23,68 +23,63 @@ def scrape_rgl_match_page(start: int, take: int = 1000) -> list:
     return [SiteID(data["matchId"], TfSource.RGL) for data in response]
 
 def scrape_rgl_match_ids() -> int:
+    """
+    Scrapes a set containing the IDs of all RGL matches played since its inception.
+    """
     match_logger.log_info("Scraping rgl match IDs")
 
+    # Get the data from after the last match stored in the database
     num_stored = Match.get_count(TfSource.RGL)
     next_match_data = scrape_rgl_match_page(num_stored)
 
+    # If no data returned then we are up to date
     if not next_match_data:
         match_logger.log_info("No new matches found")
         return 0
 
+    # While we are getting data from the endpoint, add it to the database
     while next_match_data:
         for _id in next_match_data:
             match_logger.log_info(f"Inserting match with ID {_id.get_id()}", end='\r')
             Match.insert(db_session, _id, commit=False)
         db_session.commit()
+        # Offset request by number of matches in database
         next_match_data = scrape_rgl_match_page(Match.get_count(TfSource.RGL))
 
     match_logger.log_info(f"Added {Match.get_count(TfSource.RGL) - num_stored} new matches to the database")
 
-
-def insert_rgl_match(match: dict) -> bool:
-
-    if Match.get_rgl_match(int(match["matchId"])).is_complete:
-        return False
-
-    from services import TeamService
-
-    home_team, away_team = match["teams"]
-    home_team_id = TeamService.insert_roster_id(home_team["teamId"])
-    away_team_id = TeamService.insert_roster_id(away_team["teamId"])
-
-    m = Match.get_rgl_match(int(match["matchId"]))
-    m.update_from_rgl_data(match)
-
-    for _map in match["maps"]:
-        homeResult = MatchResult(int(match["matchId"]), int(home_team_id), _map["mapName"], _map["homeScore"] if _map["homeScore"] is not None else -1)
-        awayResult = MatchResult(int(match["matchId"]), int(away_team_id), _map["mapName"], _map["awayScore"] if _map["homeScore"] is not None else -1)
-
-        db_session.add_all([homeResult, awayResult])
-    m.is_complete = True
-    db_session.commit()
-
-def scrape_detailed_rgl_matches() -> int:
-
+def scrape_rgl_matches(rgl_ids: list[int]):
     match_logger.log_info("Scraping match details from RGL website")
-
-    match_ids = [match.rgl_match_id for match in Match.get_incomplete("RGL")]
-
-    if not match_ids:
-        match_logger.log_info("No additional matches to scrape")
-        return
-
-    to_scrape = [f"https://api.rgl.gg/v0/matches/{_id}" for _id in match_ids]
+    to_scrape = [f"https://api.rgl.gg/v0/matches/{_id}" for _id in rgl_ids]
     num_added = 0
 
     for result in scrape_parallel(to_scrape, 9):
         num_added += len(result)
         match_logger.log_info(f"Scraping detailed matches {(num_added*100) / len(to_scrape):.2f}%, ({num_added} / {len(to_scrape)})", end='\r')
-        for r in result:
-            insert_rgl_match(r)
+        for match_data in result:
+            new_match = TfDataDecoder.decode_match(TfSource.RGL, match_data)
+            Match.update(new_match, commit=False)
+        db_session.commit()
 
     match_logger.log_info(f"Added {num_added} new detailed match data", start='\n')
 
-def update() -> None:
+
+def scrape_rgl() -> int:
+
     scrape_rgl_match_ids()
-    scrape_detailed_rgl_matches()
+    match_ids = [match.rgl_match_id for match in Match.get_incomplete(TfSource.RGL)]
+
+    if not match_ids:
+        match_logger.log_info("No additional matches to scrape")
+        return
+
+    scrape_rgl_match_ids(match_ids)
+
+def scrape_etf2l_matches() -> int:
+    pass
+
+def scrape_etf2l():
+    pass
+
+def scrape_ugc():
+    pass
