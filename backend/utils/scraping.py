@@ -90,8 +90,6 @@ class TfDataDecoder:
             match_data.get("matchName", None),
             match_data.get("isForfeit", None),
             SiteID.rgl_id(match_data.get("seasonId", None)),
-            SiteID.rgl_id(match_data.get("divisionId", None)),
-            SiteID.rgl_id(match_data.get("regionId", None))
         )
         home_team, away_team = match_data.get("teams", ({}, {}))
 

@@ -43,10 +43,8 @@ def test_update(session):
 
     to_update = Match.get_fromsource(m_1)
     to_update.match_epoch = 10
-    to_update.division_id = 7
     assert Match.update(session, to_update)
     assert Match.get_fromsource(m_1).match_epoch == 10
-    assert Match.get_fromsource(m_1).division_id == 7
 
     m_2 = SiteID.rgl_id(32)
     assert Match.insert(session, m_2)
@@ -64,8 +62,6 @@ def test_update(session):
     assert match_2.match_epoch == 1497490200.0
     assert match_2.rgl_match_id == 32
     assert match_2.season_id == 1
-    assert match_2.division_id == 7
-    assert match_2.region_id == 1
     assert match_2.match_name == "Week 1 - Badwater"
 
     assert len(match_2.results) == 2

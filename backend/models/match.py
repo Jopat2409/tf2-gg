@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship, scoped_session
-from sqlalchemy import Integer, Boolean, Float, String
+from sqlalchemy import Integer, Boolean, Float, String, ForeignKey
 from typing import List, TYPE_CHECKING
 
 from database import Base
@@ -31,11 +31,8 @@ class Match(Base):
     match_name: Mapped[String] = mapped_column(String, nullable=True)
     was_forfeit: Mapped[Boolean] = mapped_column(Boolean, nullable=True)
 
-    season_id: Mapped[Integer] = mapped_column(Integer, nullable=True)
+    season_id: Mapped[Integer] = mapped_column(ForeignKey("seasons.season_id", name="fk_season_id"), nullable=True)
     season: Mapped[Season] = relationship(back_populates="matches", foreign_keys=season_id)
-
-    division_id: Mapped[Integer] = mapped_column(Integer, nullable=True)
-    region_id: Mapped[Integer] = mapped_column(Integer, nullable=True)
 
     is_complete: Mapped[Boolean] = mapped_column(Boolean, default=False)
     results: Mapped[List[MatchResult]] = relationship("MatchResult", back_populates="match")
@@ -45,9 +42,7 @@ class Match(Base):
                     epoch: float | None = None,
                     name: str | None = None,
                     forfeit: bool | None = None,
-                    season: SiteID | None = None,
-                    division: SiteID | None = None,
-                    region: SiteID | None = None) -> None:
+                    season: SiteID | None = None) -> None:
         self.ID_MAPPING = {
             TfSource.RGL: "rgl_match_id",
             TfSource.UGC: "ugc_match_id",
@@ -58,9 +53,12 @@ class Match(Base):
         self.match_epoch = epoch
         self.match_name = name
         self.was_forfeit = bool(forfeit) if forfeit is not None else None
-        self.season_id = season.get_id() if season else None
-        self.division_id = division.get_id() if division else None
-        self.region_id = region.get_id() if region else None
+
+        # Create Season
+        if season:
+            from models import Season
+            self.season = Season.get_fromsource(season) or Season(season)
+            self.season_id = self.season.season_id
 
     @staticmethod
     def insert(session: scoped_session,
@@ -69,9 +67,7 @@ class Match(Base):
                 epoch: float | None = None,
                 name: str | None = None,
                 forfeit: bool | None = None,
-                season: SiteID | None = None,
-                division: SiteID | None = None,
-                region: SiteID | None = None) -> Match | None:
+                season: SiteID | None = None) -> Match | None:
 
         # Block attempts to insert matches with the same match ID
         if Match.get_fromsource(match_id):
@@ -79,7 +75,7 @@ class Match(Base):
             return None
 
         # Create and add match
-        match = Match(match_id, epoch, name, forfeit, season, division, region)
+        match = Match(match_id, epoch, name, forfeit, season)
         session.add(match)
 
         # Commit if applicable
@@ -100,9 +96,14 @@ class Match(Base):
         to_update.match_name = other.match_name
         to_update.match_epoch = other.match_epoch
         to_update.was_forfeit = other.was_forfeit
+
+        # Add season if not already added
+        from models import Season
+        if not Season.get(other.season_id):
+            session.add(session.merge(other.season))
+
         to_update.season_id = other.season_id
-        to_update.division_id = other.division_id
-        to_update.region_id = other.region_id
+        to_update.season = other.season
 
         to_update.is_complete = other.is_complete
 

@@ -9,7 +9,7 @@ def __generate_id_factory(cls, id_col):
         return new_id
     return next_id
 
-def __clear_id_factory(cls):
+""" def __clear_id_factory(cls):
     def clear_ids(mapper, connection, target):
         to_clear = []
         for id_ in cls.UNCOMMITTED_IDS:
@@ -17,7 +17,13 @@ def __clear_id_factory(cls):
                 to_clear.append(id_)
         for id_ in to_clear:
             cls.UNCOMMITTED_IDS.remove(id_)
-    return clear_ids
+    return clear_ids """
+
+def __clear_out_of_scope(cls, id_col):
+    def clear_out_of_scope(self):
+        id_ = getattr(self, id_col)
+        cls.UNCOMMITTED_IDS.discard(id_)
+    return clear_out_of_scope
 
 def cache_ids(id_col):
     """"
@@ -36,8 +42,9 @@ def cache_ids(id_col):
     """
     def decorator(cls):
         cls.UNCOMMITTED_IDS = set()
-        cls.discard_committed_ids = staticmethod(__clear_id_factory(cls))
+        #cls.discard_committed_ids = staticmethod(__clear_id_factory(cls))
         cls.get_next_id = staticmethod(__generate_id_factory(cls, id_col))
-        event.listen(cls, "after_insert", cls.discard_committed_ids)
+        cls.__del__ = __clear_out_of_scope(cls, id_col)
+        #event.listen(cls, "after_insert", cls.discard_committed_ids)
         return cls
     return decorator
