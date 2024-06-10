@@ -303,16 +303,68 @@ class Match(Base):
                 forfeit: bool | None = None,
                 season: SiteID | None = None,
                 division: SiteID | None = None,
-                region: SiteID | None = None) -> None:
-        match = Match.get_match_from_source(match_id)
-        if not match:
-            match = Match(match_id, epoch, name, forfeit, season, division, region)
-            session.add(match)
-            if commit:
-                session.commit()
-        else:
+                region: SiteID | None = None) -> Match | None:
+
+        # Block attempts to insert matches with the same match ID
+        if Match.get_fromsource(match_id):
             model_logger.log_warn(f"Attempting to insert match {match_id} when this match already exists")
+            return None
+
+        # Create and add match
+        match = Match(match_id, epoch, name, forfeit, season, division, region)
+        session.add(match)
+
+        # Commit if applicable
+        if commit:
+            session.commit()
+
+        # If we have commited then success if change reflected, else assume success
+        return Match.get_fromsource(match_id) if commit else match
+
+
+    @staticmethod
+    def update(session: scoped_session, other: Match, commit: bool = True) -> bool:
+        to_update = Match.get_fromsource(other.get_site_id())
+
+        if not to_update:
+            return False
+
+        to_update.match_name = other.match_name
+        to_update.match_epoch = other.match_epoch
+        to_update.was_forfeit = other.was_forfeit
+        to_update.season_id = other.season_id
+        to_update.division_id = other.division_id
+        to_update.region_id = other.region_id
+
+        to_update.results = other.results
+        to_update.is_complete = other.is_complete
+
+        if commit:
+            session.commit()
+
+        return True
+
+    @staticmethod
+    def get_or_insert(session: scoped_session,
+                        match_id: SiteID,
+                        commit: bool = True) -> Match | None:
+
+        match = Match.get_fromsource(match_id)
+
+        # Insert match if not found
+        if not match:
+            match = Match.insert(session, match_id, commit=commit)
+
         return match
+
+    @staticmethod
+    def get_fromsource(match_id: SiteID) -> Match:
+        if match_id.get_source() == TfSource.RGL:
+            return Match.query.filter(Match.rgl_match_id == match_id.get_id()).first()
+        #TODO Implement other ones
+
+    def get_site_id(self) -> SiteID:
+        return SiteID.rgl_id(self.rgl_match_id) if self.rgl_match_id is not None else SiteID(TfSource.UGC, self.rgl_match_id)
 
     def add_map(self, map_name: str, home_team: SiteID, home_score: int, away_team: SiteID, away_score: int) -> None:
         self.results.append(MatchResult(self.match_id, home_team.get_id(), map_name, home_score))
@@ -334,11 +386,6 @@ class Match(Base):
     def get_incomplete(league: str) -> list[Match]:
         return Match.query.filter(Match.rgl_match_id is not None, Match.is_complete == 0).all()
 
-    @staticmethod
-    def get_match_from_source(match_id: SiteID) -> Match:
-        if match_id.get_source() == TfSource.RGL:
-            return Match.query.filter(Match.rgl_match_id == match_id.get_id()).first()
-        #TODO Implement other ones
 
     @staticmethod
     def get_matches(team_id: int = None) -> list[Match]:
