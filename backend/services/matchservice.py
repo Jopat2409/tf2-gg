@@ -2,7 +2,7 @@ from utils.logger import Logger
 from utils.scraping import post_request, scrape_parallel
 from utils.typing import SiteID, TfSource, TfDataDecoder
 
-from models import Match, MatchResult
+from models import Match
 from database import db_session
 
 match_logger = Logger.get_logger()
