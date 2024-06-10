@@ -1,18 +1,6 @@
-from services import read_or_create, scrape_parallel, sleep_then_request, get_first
+from services import scrape_parallel, sleep_then_request, get_first
 import time
-import os
 
-def test_read_or_create():
-    # Test works with file that does not exist
-    test1 = read_or_create("tests\\test_data\\doesnt_exist.json", {})
-    assert test1 == {}
-    assert os.path.isfile("tests\\test_data\\doesnt_exist.json")
-    os.remove("tests\\test_data\\doesnt_exist.json")
-
-    test2 = read_or_create("tests\\test_data\\test.json", {})
-    assert "data" in test2.keys()
-    assert "testvalue1" in test2["data"]
-    assert "testvalue2" in test2["data"]
 
 def test_sleep_then_request():
     start_time = time.perf_counter()
