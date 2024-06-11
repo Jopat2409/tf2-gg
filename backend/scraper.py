@@ -12,3 +12,10 @@ if __name__ == "__main__":
     if "rgl" in args:
         __logger.log_info("Scraping RGL data")
         test_func()
+
+    if "test" in args:
+        print("hello")
+        import db.team
+        team = db.team.Team(10)
+        db.team.insert(team)
+        db.team.get(10)

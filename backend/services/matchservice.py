@@ -1,6 +1,6 @@
 from utils.logger import Logger
-from utils.scraping import post_request, scrape_parallel
-from utils.typing import SiteID, TfSource, TfDataDecoder
+from utils.scraping import post_request, scrape_parallel, TfDataDecoder
+from utils.typing import SiteID, TfSource
 
 from models import Match
 from database import db_session
