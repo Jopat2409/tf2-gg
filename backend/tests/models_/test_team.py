@@ -1,26 +1,18 @@
 from models import Team
 
 def test_team_constructor(session):
-    Team()
-    assert Team.count() == 0
-    team = Team(10)
-    assert team.team_id == 10
+
+    team_1 = Team()
     assert Team.count() == 0
 
-def test_team_insert(session):
+    team_2 = Team(10)
+    assert team_2.team_id == 10
+    assert Team.count() == 0
 
-    # Standard insert
-    team = Team.insert(session)
-    assert Team.get(team.team_id).team_id == 1
+    del team_1
 
-    # Insert without commit
-    team_2 = Team.insert(session, commit=False)
-    assert team_2.team_id == 2
-    assert Team.get(team_2.team_id) is None
-    session.commit()
-    assert Team.get(team_2.team_id).team_id == 2
-
-    assert Team.insert(session, 1) is None
+    assert not Team._CACHEIDS_UNCOMMITTED_IDS
+    assert not Team._STAGEDMODEL_STAGED_OBJECTS
 
 def test_team_stage(session):
     # Normal stage
@@ -35,6 +27,33 @@ def test_team_stage(session):
     t_2.stage(session)
     session.commit()
     assert Team.count() == 1
+
+    # Test not insert with double stage before commit
+    team_3 = Team(1234)
+    team_4 = Team(1234)
+    team_3.stage(session)
+    team_4.stage(session)
+    session.commit()
+    assert Team.count() == 2
+
+def test_team_insert(session):
+
+    # Standard insert
+    print(f"IDS: {Team._CACHEIDS_UNCOMMITTED_IDS}")
+    print(f"STAGED: {Team._STAGEDMODEL_STAGED_OBJECTS}")
+    team = Team.insert(session)
+    print(team.team_id)
+    assert Team.get(team.team_id).team_id == 1
+
+    # Insert without commit
+    team_2 = Team.insert(session, commit=False)
+    assert team_2.team_id == 2
+    assert Team.get(team_2.team_id) is None
+    session.commit()
+    assert Team.get(team_2.team_id).team_id == 2
+
+    assert Team.insert(session, 1) is None
+
 
 def test_get_or_insert(session):
     Team.insert(session, 1)

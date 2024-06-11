@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship, scoped_session
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy import Integer
 from typing import List, TYPE_CHECKING, Optional
 
 from database import Base
-from utils.decorators import cache_ids
+from utils.decorators import cache_ids, staged_model
 
 if TYPE_CHECKING:
     from models import Roster
 else:
     Roster = "Roster"
 
+@staged_model("team_id")
 @cache_ids("team_id")
 class Team(Base):
     """
@@ -25,16 +27,6 @@ class Team(Base):
     def __init__(self,
                     team_id: Optional[int] = None) -> None:
         self.team_id = team_id or int(Team.get_next_id())
-
-    def stage(self, session: scoped_session):
-        """
-        Ensures that this model instance and all sub-model instances are added to the session
-
-        params:
-            session[scoped_session]: The session to add the team to
-        """
-        if not Team.get(self.team_id):
-            session.add(session.merge(self))
 
     @staticmethod
     def insert(session: scoped_session,
@@ -92,3 +84,6 @@ class Team(Base):
         Gets the number of teams present in the database
         """
         return len(Team.query.all())
+
+    def __repr__(self) -> str:
+        return f"""Team with ID {self.team_id}"""

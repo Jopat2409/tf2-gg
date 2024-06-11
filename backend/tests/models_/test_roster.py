@@ -1,41 +1,60 @@
-from models import Roster
+from models import Roster, Team
 from utils.typing import SiteID
 
-def test_insert(session):
-  # Insert single
-  success = Roster.insert(session, SiteID.rgl_id(10))
-  assert success
-  assert not Roster.insert(session, SiteID.rgl_id(10))
-  assert Roster.get_fromsource(SiteID.rgl_id(10))
+def test_constructor(session):
+    roster = Roster(SiteID.rgl_id(32))
+    assert roster.rgl_team_id == 32
+    assert Roster.count() == 0
 
-  # Insert single (without commit)
-  assert Roster.insert(session, SiteID.rgl_id(20), commit=False)
-  assert not Roster.get_fromsource(SiteID.rgl_id(20))
-  session.commit()
-  assert Roster.get_fromsource(SiteID.rgl_id(20))
+    roster = Roster(SiteID.rgl_id(32), 10)
+    assert roster.rgl_team_id == 32
+    assert roster.team_id == 10
+    assert roster.team is not None
+    assert roster.team.team_id == 10
+    assert Team.count() == 0
 
-  # Insert single (recursive)
-  success = Roster.insert(session, SiteID.rgl_id(30), recursive=True)
-  assert success
-  assert Roster.get_fromsource(SiteID.rgl_id(30)).team_id == 1
+def test_roster_stage(session):
 
-  # Insert single (related roster)
-  success = Roster.insert(session, SiteID.rgl_id(35), recursive=True, related_rosters=[SiteID.rgl_id(30)])
-  assert success
-  assert Roster.get_fromsource(SiteID.rgl_id(35)).team_id == 1
+    # Test roster with just roster ID
+    roster_1 = Roster(SiteID.rgl_id(32))
+    roster_1.stage(session)
+    assert Roster.count() == 0
+    session.commit()
+    assert Roster.count() == 1
+    assert Team.count() == 0
+    assert Roster.get_fromsource(SiteID.rgl_id(32)) is not None
+    roster_1.stage(session)
+    assert Roster.count() == 1
 
-  # Insert single (post-team-creation)
-  success = Roster.insert(session, SiteID.rgl_id(40))
-  assert success
-  assert not Roster.get_fromsource(SiteID.rgl_id(40)).team_id
+    # Test roster with new team
+    roster_2 = Roster(SiteID.rgl_id(40), 10)
+    roster_2.stage(session)
+    assert Roster.count() == 1
+    assert Team.count() == 0
+    session.commit()
+    assert Roster.count() == 2
+    assert Team.count() == 1
+    assert Roster.get_fromsource(SiteID.rgl_id(40)) is not None
+    assert Team.get(10) is not None
+    session.commit()
 
-  # Insert recursive without commit
-  success = Roster.insert(session, SiteID.rgl_id(45), recursive=True, commit=False)
-  assert success
-  session.commit()
-  assert Roster.get_fromsource(SiteID.rgl_id(45)).team_id == 2
-  # Test inserting just ID
+    # Test roster with already created team
+    roster_3 = Roster(SiteID.rgl_id(50), 10)
+    roster_3.stage(session)
+    assert Roster.count() == 2
+    assert Team.count() == 1
+    session.commit()
+    assert Roster.count() == 3
+    assert Team.count() == 1
 
-  # Test inserting whole thing with linked stuff
+    # Test roster with 2
+    roster_4 = Roster(SiteID.rgl_id(60), 20)
+    roster_5 = Roster(SiteID.rgl_id(70), 20)
+    roster_4.stage(session)
+    roster_5.stage(session)
+    session.commit()
+    assert Team.count() == 2
+    assert Roster.count() == 5
 
-  # test inserting epic epic carpal tunner
+def test_roster_insert(session):
+    pass

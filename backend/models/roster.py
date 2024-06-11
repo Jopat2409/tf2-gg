@@ -4,10 +4,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, scoped_session
 from sqlalchemy import Integer, Boolean, Float, String, ForeignKey
 from typing import List, TYPE_CHECKING
 
-from database import Base
-from utils.decorators import cache_ids
+from utils.decorators import cache_ids, site_resource
 from utils.typing import SiteID, TfSource
 from utils.logger import Logger
+from database import Base
 
 # Prevent circular imports while maintaining typing
 if TYPE_CHECKING:
@@ -20,6 +20,7 @@ else:
 roster_logger = Logger.get_logger()
 
 @cache_ids("roster_id")
+@site_resource("rgl_team_id", "etf2l_team_id", "ugc_team_id")
 class Roster(Base):
     __tablename__ = "rosters"
     roster_id: Mapped[Integer] = mapped_column(ForeignKey("teams.team_id"), primary_key=True, autoincrement=True) # Internal roster id
@@ -48,16 +49,25 @@ class Roster(Base):
                     tag: str | None = None,
                     created: float | None = None,
                     updated: float | None = None):
+
         self.roster_id = int(Roster.get_next_id())
-        if roster_id.get_source() == TfSource.RGL:
-            self.rgl_team_id = roster_id.get_id()
-        elif roster_id.get_source() == TfSource.ETF2L:
-            self.etf2l_team_id = roster_id.get_id()
-        self.team_id = team_id
+        self.set_source_id(roster_id)
+
+        # Construct the team
+        if team_id is not None:
+            from models import Team
+            self.team = Team(team_id)
+            self.team_id = self.team.team_id
+
         self.roster_name = name
         self.roster_tag = tag
         self.created_at = created
         self.updated_at = updated
+
+    def stage(self, session: scoped_session) -> None:
+        # stage self
+        if not Roster.get(self.roster_id):
+            session.add(session.merge(self))
 
     @staticmethod
     def insert(session: scoped_session,
@@ -131,7 +141,13 @@ class Roster(Base):
         self.players.append(player)
         return True
 
-
     @staticmethod
     def get_incomplete() -> list[Roster]:
         return Roster.query.filter(Roster.rgl_team_id is not None, Roster.is_complete == 0)
+
+    @staticmethod
+    def count() -> int:
+        return len(Roster.query.all())
+
+    def __repr__(self) -> str:
+        return f"""RosterId: {self.roster_id}, SourceId: {self.get_source_id()}"""

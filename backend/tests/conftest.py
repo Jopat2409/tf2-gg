@@ -28,7 +28,7 @@ def session(engine_, tables):
     conn = engine_.connect()
     transaction = conn.begin()
 
-    Session = scoped_session(sessionmaker(bind=conn))
+    Session = scoped_session(sessionmaker(bind=conn, autocommit=False, autoflush=False))
     session = Session()
 
     yield session
