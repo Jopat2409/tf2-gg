@@ -10,12 +10,13 @@ from utils.logger import Logger
 file_logger = Logger.get_logger()
 
 def read_or_create( file: str,
-                    default: dict = {}) -> None:
+                    default: dict = {},
+                    cls: js.JSONDecoder = None) -> None:
     try:
-        with open(file, "r") as f:
-            return js.load(f)
+        with open(file, "r", encoding='utf-8') as f:
+            return js.load(f, cls=cls)
     except FileNotFoundError:
-        with open(file, "w") as f:
+        with open(file, "w", encoding='utf-8') as f:
             js.dump(default, f)
     return default
 

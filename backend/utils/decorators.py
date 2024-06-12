@@ -61,18 +61,18 @@ def __set_id_factory(rgl, etf2l, ugc):
             setattr(self, ugc, id_.get_id())
     return set_id
 
-def __get_id_factory(rgl, etf2l, ugc):
+def __get_id_factory():
     def get_id(self) -> SiteID | None:
-        if getattr(self, rgl) is not None:
-            return SiteID.rgl_id(getattr(self, rgl))
-        elif getattr(self, etf2l) is not None:
-            return SiteID.etf2l_id(getattr(self, etf2l))
-        elif getattr(self, ugc) is not None:
-            return SiteID.etf2l_id(getattr(self, ugc))
+        if getattr(self, "rgl_id") is not None:
+            return SiteID.rgl_id(getattr(self, "rgl_id"))
+        elif getattr(self, "etf2l_id") is not None:
+            return SiteID.etf2l_id(getattr(self, "etf2l_id"))
+        elif getattr(self, "ugc_id") is not None:
+            return SiteID.etf2l_id(getattr(self, "ugc_id"))
         return SiteID.rgl_id(None)
     return get_id
 
-def site_resource(rgl_col, etf2l_col, ugc_col):
+def site_resource():
     """
     Decorator used to mark models as being resources from TF2 endpoints
 
@@ -81,11 +81,15 @@ def site_resource(rgl_col, etf2l_col, ugc_col):
     This decorator also implements two methods to interact with these source IDs, `set_source_id(SiteID)`, and `get_source_id() -> SiteID`
     """
     def decorator(cls):
-        cls.set_source_id = __set_id_factory(rgl_col, etf2l_col, ugc_col)
-        cls.get_source_id = __get_id_factory(rgl_col, etf2l_col, ugc_col)
+
+        cls.rgl_id = None
+        cls.etf2l_id = None
+        cls.ugc_id = None
+
+        cls.set_source_id = __set_id_factory()
+        cls.get_source_id = __get_id_factory()
         return cls
     return decorator
-
 
 def __stage_factory(cls, pk_col):
     def stage(self, session):

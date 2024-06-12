@@ -1,8 +1,9 @@
 from typing import Any
 import requests
 import time
+import json
 from multiprocessing import Pool
-from models import Match, Roster
+from db.match import Match, Map
 from utils.typing import TfSource, SiteID
 from utils import epoch_from_timestamp
 
@@ -77,43 +78,89 @@ def find_optimal_scraping_params(test_url: str, start_delay_size: int = 1, end_d
     return {"delay_size": best_combo[0], "delay_step": best_combo[1]}
         # Increment delay step until all 10 status codes are 200
 
-class TfDataDecoder:
+class TfDataDecoder(json.JSONDecoder):
     """
-    Class for decoding API data into ORM models
+    Class for decoding API data into classes
     """
-
     @staticmethod
     def __decode_rgl_match(match_data: dict) -> Match:
+
+        home_team = next(team for team in match_data.get("teams", []) if team["isHome"])["teamId"]
+        away_team = next(team for team in match_data.get("teams", []) if not team["isHome"])["teamId"]
+
         match = Match(
             SiteID.rgl_id(match_data["matchId"]),
-            epoch_from_timestamp(match_data.get("matchDate", 0)) or None,
             match_data.get("matchName", None),
+            epoch_from_timestamp(match_data.get("matchDate", 0)) or None,
             match_data.get("isForfeit", None),
             SiteID.rgl_id(match_data.get("seasonId", None)),
+            SiteID.rgl_id(home_team),
+            SiteID.rgl_id(away_team)
         )
-        home_team, away_team = match_data.get("teams", ({}, {}))
-
-        if not home_team or not away_team:
-            return match
 
         for map_ in match_data.get("maps", []):
-            match.add_map(map_["mapName"], SiteID.rgl_id(home_team["teamId"]), map_["homeScore"], SiteID.rgl_id(away_team["teamId"]), map_["awayScore"])
+            name, home_score, away_score = map_.get("mapName"), match.get("homeScore"), match.get("awayScore")
+            match.add_map_data(name, home_score is None and away_score is None, home_score or 0, away_score or 0)
+
         return match
 
+    @staticmethod
     def __decode_etf2l_match(match_data: dict) -> Match:
+
+        match_name = match_data.get("competition", {}).get("name", "") + " " + match_data.get("round", "")
+
+        home_team = match_data.get("clan1", {}).get("id", None)
+        away_team = match_data.get("clan2", {}).get("id", None)
+
         match = Match(
             SiteID.etf2l_id(match_data["id"]),
+            match_name,
             float(match_data.get("time", 0)) or None,
-            match_data.get("competition", {}).get("name", None),
             match_data.get("defaultwin", None),
-            SiteID.etf2l_id(match_data.get("competition", {}).get("id", None))
+            SiteID.etf2l_id(match_data.get("competition", {}).get("id", None)),
+            SiteID.etf2l_id(home_team),
+            SiteID.etf2l_id(away_team)
         )
+
+        for map_ in match_data.get("map_results", []):
+            match.add_map_data(map_["map"], True, map_["clan1"], map_["clan2"])
+
+        return match
+
+    @staticmethod
+    def __decode_match(match_data: dict) -> Match:
+        match = Match(
+            SiteID(TfSource[match_data["matchId"]["source"]], match_data["matchId"]["id"]),
+            match_data["matchName"],
+            float(match_data["matchTime"] or 0),
+            match_data["wasForfeit"],
+            SiteID(TfSource[match_data["eventId"]["source"]], match_data["eventId"]["id"]),
+            SiteID(TfSource[match_data["homeTeam"]["source"]], match_data["homeTeam"]["id"]),
+            SiteID(TfSource[match_data["awayTeam"]["source"]], match_data["awayTeam"]["id"]),
+        )
+        for map_ in match_data["maps"]:
+            match.add_map_data(map_["mapName"], map_["wasPlayed"], int(map_["homeScore"]), int(map_["awayScore"]))
+        return match
 
     @staticmethod
     def decode_match(source: TfSource, match_data: dict) -> Match:
         if source == TfSource.RGL:
             return TfDataDecoder.__decode_rgl_match(match_data)
+        if source == TfSource.ETF2L:
+            return TfDataDecoder.__decode_etf2l_match(match_data)
+        if source == TfSource.INERNAL:
+            return TfDataDecoder.__decode_match(match_data)
 
-    @staticmethod
-    def decode_roster(source: TfSource, roster_data: dict) -> Roster:
-        return None
+
+    def object_hook(self, obj):
+
+        if "match" in obj:
+            return TfDataDecoder.decode_match(TfSource.INTERNAL, obj)
+        return obj
+
+class TfDataEncoder(json.JSONEncoder):
+
+    def default(self, o: Any) -> Any:
+        if isinstance(o, Match):
+            return {"match": o.to_dict()}
+        return super().default(o)

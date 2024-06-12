@@ -5,7 +5,8 @@ from enum import IntEnum
 class TfSource(IntEnum):
     RGL = 1,
     UGC = 2,
-    ETF2L = 3
+    ETF2L = 3,
+    INERNAL = 4
 
 class SiteID:
 
@@ -41,3 +42,9 @@ class SiteID:
 
     def __repr__(self) -> str:
         return f"""({self.__source.name} ID: {self.__id})"""
+
+    def to_dict(self) -> dict:
+        return {
+            "source": self.get_source().name,
+            "id": self.get_id()
+        }
