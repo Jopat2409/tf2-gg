@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 from enum import IntEnum
+from dataclasses import dataclass
 
 class TfSource(IntEnum):
     RGL = 1,
     UGC = 2,
     ETF2L = 3,
-    INERNAL = 4
+    INTERNAL = 4
 
+@dataclass(frozen=True)
 class SiteID:
 
-    def __init__(self, id_: int, source: TfSource):
-        self.__id = int(id_)
-        self.__source = source
+    __id: int
+    __source: TfSource
 
     def get_id(self) -> int:
         return self.__id
@@ -24,9 +25,6 @@ class SiteID:
         if not isinstance(other, SiteID):
             return False
         return other.get_source() == self.get_source() and other.get_id() == self.get_id()
-
-    def __neq__(self, other: SiteID) -> bool:
-        return not self == other
 
     @staticmethod
     def rgl_id(id_: int) -> SiteID | None:

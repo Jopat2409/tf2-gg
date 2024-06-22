@@ -60,7 +60,8 @@ def write_to_file(  path: str,
                     data: Any,
                     create: bool = True,
                     json: bool = False,
-                    encoding='utf-8') -> None:
+                    encoding='utf-8',
+                    cls: js.JSONEncoder = js.JSONEncoder) -> None:
 
     if not os.path.isfile(path):
         if not create:
@@ -71,7 +72,7 @@ def write_to_file(  path: str,
 
     try:
         with open(path, "w", encoding=encoding) as f:
-            js.dump(data, f) if json else f.write(str(data))
+            js.dump(data, f, cls=cls) if json else f.write(str(data))
             f.truncate()
     except OSError as e:
         file_logger.log_error(f"Error when saving data to file {path}")

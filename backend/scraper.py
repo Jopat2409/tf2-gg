@@ -2,29 +2,46 @@ import sys
 import json
 
 from services import MatchService
+
+from db.match import Match
+
 from utils.logger import Logger
-from utils.file import read_or_create
+from utils.file import read_or_create, write_to_file
+from utils.typing import SiteID, TfSource
 from utils.scraping import TfDataDecoder, TfDataEncoder
 
+def __scrape_remaining_etf2l_matches(current_matches: dict[TfSource, list[Match]], batches: int = 10) -> None:
+
+    # Calculate the starting page, the number of pages to scrape and the batch size to use (n)
+    start = (len(current_matches.get(TfSource.ETF2L, [])) // 20) + 1
+    pages = range(start, MatchService.get_last_etf2l_match_page() + 1)
+    n = len(pages) // batches
+
+    write: callable = lambda x: write_to_file("data\\match_data.json", x, create=False, json=True, cls=TfDataEncoder)
+
+    # Scrape the remaining mathes in batches and store to the file intermittendly
+    for pages_ in [pages[i: i + n] for i in range(0, len(pages), n)]:
+        current_matches[TfSource.ETF2L] += MatchService.scrape_etf2l_matches(pages=pages_)
+        write([match for matches in current_matches.values() for match in matches])
+    
+    # Finally, write all matches back to the file
+    write([match for matches in current_matches.values() for match in matches])
+
+def __scrape_remaining_rgl_matches(current_matches: dict[TfSource, list[Match]]) -> None:
+    pass
 
 def commit_matches_to_file():
-    matches = read_or_create("data\\etf2l_matches.json", [])
+    matches: list[SiteID] = read_or_create("data\\match_data.json", default=[], cls=TfDataDecoder)
 
-    PER_PAGE = 20
-    start = (len(matches) // PER_PAGE) + 1
+    separated_matches = {
+         source: [match for match in matches if match.get_source() == source] for source in TfSource
+    }
 
-    pages = range(start, MatchService.get_last_etf2l_match_page() + 1)
-    n = len(pages) // 10
+    __scrape_remaining_etf2l_matches(separated_matches)
+    __scrape_remaining_rgl_matches(separated_matches)
 
-    for pages_ in [pages[i: i + n] for i in range(0, len(pages), n)]:
-        matches += MatchService.scrape_etf2l_matches(pages=pages_)
-        with open("data\\etf2l_matches.json", "w", encoding='utf-8') as f:
-            json.dump(matches, f, cls=TfDataEncoder)
-
-    matches = {match.match_id: match for match in matches}
-
-    with open("data\\etf2l_matches.json", "w", encoding='utf-8') as f:
-            json.dump(list(matches.values()), f, cls=TfDataEncoder)
+def commit_teams_to_file():
+     teams = read_or_create("data\\")
 
 if __name__ == "__main__":
     args = sys.argv[1::]

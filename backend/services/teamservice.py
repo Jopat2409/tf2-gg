@@ -1,37 +1,34 @@
-from models import Roster, Player, RosterPlayerAssociation
-from utils.scraping import scrape_parallel
-from utils import epoch_from_timestamp
-from database import db_session
-from utils import Logger
+"""
+All functions related to scraping team and roster data from the three main tf2 APIs:
+    - RGL
+    - ETF2L (coming soon!)
+    - UGC (don't have API so will have to scrape)
+"""
+from db.team import Team
+from db.match import Match
 
+from utils.logger import Logger
+from utils.typing import SiteID, TfSource
+from utils.scraping import scrape_parallel, TfDataDecoder
+
+# Setup logging
 team_logger = Logger.get_logger()
 
+def get_rgl_teams_from_matches(matches: list[Match]) -> list[SiteID]:
 
-def insert_roster(roster_data: dict) -> None:
+    unique_rosters = set()
 
-    roster = Roster.get_rgl_roster(int(roster_data["teamId"]))
-    roster.update_from_rgl_data(roster_data)
+    for match in matches:
+        unique_rosters.add(match.home_team)
+        unique_rosters.add(match.away_team)
 
-    for player in roster_data["players"]:
-        p = Player.query.filter(Player.steam_id == int(player["steamId"])).first()
-        if not p:
-            p = Player()
-            p.steam_id = int(player["steamId"])
-            db_session.add(p)
-            db_session.commit()
-        if not RosterPlayerAssociation.query.filter(RosterPlayerAssociation.player_id == int(player["steamId"]),
-                                                    RosterPlayerAssociation.roster_id == roster.roster_id,
-                                                    RosterPlayerAssociation.joined_at == epoch_from_timestamp(player["joinedAt"])):
-            ass = RosterPlayerAssociation(p, roster, epoch_from_timestamp(player["joinedAt"]), epoch_from_timestamp(player["leftAt"]))
-            db_session.add(ass)
+    return list(unique_rosters)
 
-    roster.is_complete = True
-    db_session.commit()
-
-def scrape_rgl_rosters() -> int:
+def scrape_rgl_rosters(team_ids: list[SiteID]) -> list[Team]:
     team_logger.log_info("Scraping roster data")
 
-    rosters_to_scrape = [f"https://api.rgl.gg/v0/teams/{roster.rgl_team_id}" for roster in Roster.get_incomplete()]
+    rosters_to_scrape = [f"https://api.rgl.gg/v0/teams/{roster.get_id()}" for roster in team_ids]
+    teams = []
 
     scraped = 0
     for results in scrape_parallel(rosters_to_scrape, 9):
@@ -41,11 +38,7 @@ def scrape_rgl_rosters() -> int:
         if not results:
             team_logger.log_warn(f"No results came back for team IDs {scraped}")
 
-        for result in results:
-            insert_roster(result)
+        teams += [TfDataDecoder.decode_team(TfSource.RGL, result) for result in results]
 
-    team_logger.log_info(f"Added {len(rosters_to_scrape)} new rosters", start='\n')
-
-def update():
-    # Make sure that all team data is
-    scrape_rgl_rosters()
+    team_logger.log_info(f"Added {len(teams)} new rosters", start='\n')
+    return teams

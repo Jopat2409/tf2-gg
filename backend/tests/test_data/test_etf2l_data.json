@@ -1,0 +1,108 @@
+
+{
+    "matches": [
+        {
+        "clan1": {
+          "country": "Hungary",
+          "drop": false,
+          "id": 36044,
+          "name": "G6.ELEES",
+          "steam": {
+            "avatar": "https://etf2l.org/wp-content/uploads/avatars/65752305373a2.png",
+            "group": null
+          },
+          "url": "http://api-v2.etf2l.org/team/36044"
+        },
+        "clan2": {
+          "country": "Sweden",
+          "drop": false,
+          "id": 32386,
+          "name": "Duplo",
+          "steam": {
+            "avatar": "https://etf2l.org/wp-content/uploads/avatars/63572b6153bab.jpg",
+            "group": null
+          },
+          "url": "http://api-v2.etf2l.org/team/32386"
+        },
+        "competition": {
+          "category": "6v6 Season",
+          "id": 914,
+          "name": "6v6 Season 47 (Spring 2024): Division 2",
+          "type": "6v6",
+          "url": "http://api-v2.etf2l.org/competition/914"
+        },
+        "submitted": 1716754991,
+        "defaultwin": false,
+        "division": {
+          "id": 2941,
+          "name": "Division 2A",
+          "skill_contrib": 22,
+          "tier": 1
+        },
+        "id": 88728,
+        "maps": [
+          "cp_process_f12",
+          "koth_bagel_rc8"
+        ],
+        "r1": 6,
+        "r2": 0,
+        "round": "Grand Final",
+        "time": 1716750900,
+        "week": 10,
+        "urls": {
+          "self": "https://etf2l.org/matches/88728",
+          "api": "http://api-v2.etf2l.org/matches/88728"
+        }
+      },
+      {
+        "clan1": {
+          "country": "France",
+          "drop": true,
+          "id": 35930,
+          "name": "dogs 6.0",
+          "steam": {
+            "avatar": "https://etf2l.org/wp-content/uploads/avatars/660d129e75dc8.jpg",
+            "group": "https://steamcommunity.com/groups/happydogz"
+          },
+          "url": "http://api-v2.etf2l.org/team/35930"
+        },
+        "clan2": {
+          "country": "European",
+          "drop": false,
+          "id": 36301,
+          "name": "sammakot",
+          "steam": {
+            "avatar": "https://etf2l.org/wp-content/uploads/avatars/65f3751ce5a73.jpg",
+            "group": null
+          },
+          "url": "http://api-v2.etf2l.org/team/36301"
+        },
+        "competition": {
+          "category": "6v6 Season",
+          "id": 915,
+          "name": "6v6 Season 47 (Spring 2024): Top Tiers",
+          "type": "6v6",
+          "url": "http://api-v2.etf2l.org/competition/915"
+        },
+        "submitted": 1714945428,
+        "defaultwin": true,
+        "division": {
+          "id": 2944,
+          "name": "Division 1",
+          "skill_contrib": 22,
+          "tier": 1
+        },
+        "id": 88306,
+        "maps": [],
+        "r1": 0,
+        "r2": 6,
+        "round": "Week 7",
+        "time": 1715541300,
+        "week": 7,
+        "urls": {
+          "self": "https://etf2l.org/matches/88306",
+          "api": "http://api-v2.etf2l.org/matches/88306"
+        }
+      }
+    ]
+}

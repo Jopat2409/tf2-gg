@@ -1,3 +1,4 @@
+from __future__ import annotations
 from utils.typing import SiteID
 
 class Map:
@@ -23,7 +24,14 @@ class Map:
             "homeScore": self.home_score,
             "awayScore": self.away_score
         }
-
+    
+    def __eq__(self, other: Map) -> bool:
+        if not isinstance(other, Map):
+            return False
+        return self.map_name == other.map_name and\
+                self.was_played == other.was_played and\
+                self.home_score == other.home_score and\
+                self.away_score == other.away_score
 
 class Match:
 
@@ -72,3 +80,16 @@ class Match:
             "awayTeam": self.away_team.to_dict(),
             "maps": [map_.to_dict() for map_ in self.maps]
         }
+    
+    def __eq__(self, other: Match):
+        if not isinstance(other, Match):
+            return False
+        return self.match_id == other.match_id and\
+                self.name == other.name and\
+                self.epoch == other.epoch and\
+                self.was_forfeit == other.was_forfeit and\
+                self.event_id == other.event_id and\
+                self.home_team == other.home_team and\
+                self.away_team == other.away_team and\
+                self.maps == other.maps
+
