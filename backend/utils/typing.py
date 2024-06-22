@@ -38,11 +38,14 @@ class SiteID:
             return None
         return SiteID(id_, TfSource.ETF2L)
 
+    def serialize(self) -> dict:
+        return {
+            "source": {
+                "site": self.get_source().name,
+                "id": self.get_id()
+            }
+        }
+
     def __repr__(self) -> str:
         return f"""({self.__source.name} ID: {self.__id})"""
 
-    def to_dict(self) -> dict:
-        return {
-            "source": self.get_source().name,
-            "id": self.get_id()
-        }

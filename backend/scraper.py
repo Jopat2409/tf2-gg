@@ -1,12 +1,11 @@
 import sys
-import json
 
 from services import MatchService
 
 from db.match import Match
 
 from utils.logger import Logger
-from utils.file import read_or_create, write_to_file
+from utils.file import read_or_create, write_to_file, read_required
 from utils.typing import SiteID, TfSource
 from utils.scraping import TfDataDecoder, TfDataEncoder
 
@@ -23,7 +22,7 @@ def __scrape_remaining_etf2l_matches(current_matches: dict[TfSource, list[Match]
     for pages_ in [pages[i: i + n] for i in range(0, len(pages), n)]:
         current_matches[TfSource.ETF2L] += MatchService.scrape_etf2l_matches(pages=pages_)
         write([match for matches in current_matches.values() for match in matches])
-    
+
     # Finally, write all matches back to the file
     write([match for matches in current_matches.values() for match in matches])
 
@@ -34,14 +33,20 @@ def commit_matches_to_file():
     matches: list[SiteID] = read_or_create("data\\match_data.json", default=[], cls=TfDataDecoder)
 
     separated_matches = {
-         source: [match for match in matches if match.get_source() == source] for source in TfSource
+        source: [match for match in matches if match.get_source() == source] for source in TfSource
     }
 
     __scrape_remaining_etf2l_matches(separated_matches)
     __scrape_remaining_rgl_matches(separated_matches)
 
-def commit_teams_to_file():
-     teams = read_or_create("data\\")
+def load_from_files():
+    etf2l_matches = [TfDataDecoder.decode_match(TfSource.INTERNAL, match["match"]) for match in read_or_create("data\\etf2l_matches.json", cls=TfDataDecoder)]
+    rgl_matches = [TfDataDecoder.decode_match(TfSource.RGL, match) for match in read_or_create("data\\rgl_match_data_detailed.json").values()]
+
+    all_matches: list[Match] = etf2l_matches + rgl_matches
+    all_matches_unique = list({match.match_id: match for match in all_matches}.values())
+    write_to_file("data\\match_data.json", all_matches_unique, json=True, cls=TfDataEncoder)
+
 
 if __name__ == "__main__":
     args = sys.argv[1::]
@@ -49,4 +54,5 @@ if __name__ == "__main__":
     Logger.init("logs", "scraper", "verbose" in args)
 
     __logger = Logger.get_logger()
-    commit_matches_to_file()
+    # commit_matches_to_file()
+    load_from_files()

@@ -1,3 +1,6 @@
+"""
+Utility functions to use when scraping data from websites / APIs
+"""
 import json
 import time
 import requests
@@ -6,37 +9,48 @@ from typing import Any
 from multiprocessing import Pool
 
 from db.team import Team
-from db.match import Match
+from db.match import Match, Map
 
 from utils import epoch_from_timestamp
 from utils.typing import TfSource, SiteID
 
 def post_request(url: str, default: Any = {}, **kwargs) -> tuple[int, dict]:
-    """
-    Send a POST request to the given `url`, with POST parameters as `kwargs`
+    """Send a POST request to the given `url`, with POST parameters as `kwargs`
 
-    params:
-        url[str]: url to send the POST request to
-        default[any]: default value to return upon status code other than `200`
-        **kwargs[dict]: parameters to be passed in to the POST request
+    Args:
+        url (str): The url to set the post request to
+        default (Any, optional): the default value to be returned if the status code of the POST is not 200. Defaults to {}.
 
-    returns:
-        (status_code[int], data[json]): the status code of the request and the data (or `default` if failure)
+    Returns:
+        tuple[int, dict]: the response status code and the response json (if the status code is 200) else `default`.
     """
-    headers = {'accept': '*/*'}
-    response = requests.post(url, params=kwargs, headers=headers, json={})
+    response = requests.post(url,
+                                params=kwargs,
+                                headers={'accept': '*/*'},
+                                json={})
     return (response.status_code, response.json() if response.status_code == 200 else default)
 
-def sleep_then_request(data) -> dict:
-    """
-    Sleeps then requests
+def sleep_then_request(data: tuple) -> dict:
+    """Sleeps for the given amount of time then sends a GET request to the url
+
+    Args:
+        data (tuple): tuple containing (url, delay)
+
+    Returns:
+        dict: the response from the GET request
     """
     time.sleep(data[1])
     return requests.get(data[0])
 
 def get_first(urls: list[str], n: int) -> list[str]:
-    """
-    Returns the first n items in a list
+    """Retrieves the first `n` URLs from the list
+
+    Args:
+        urls (list[str]): list of urls
+        n (int): number of urls to retrieve
+
+    Returns:
+        list[str]: list of the first n urls
     """
     return urls if n >= len(urls) else urls[:n]
 
@@ -91,15 +105,45 @@ def find_optimal_scraping_params(test_url: str, start_delay_size: int = 1, end_d
 
 class TfDataDecoder(json.JSONDecoder):
     """
-    Class for decoding API data into classes
+    Custom JSON decoder for decoding API results into a format that is consistent between them all
     """
+
+    @staticmethod
+    def _decode_rgl_map(map_data: dict) -> Map:
+        name, home_score, away_score = map_data.get("mapName"), map_data.get("homeScore"), map_data.get("awayScore")
+        return Map(name, home_score is not None and away_score is not None, home_score or 0, away_score or 0)
+
+    @staticmethod
+    def _decode_etf2l_map(map_data: dict) -> Map:
+        return Map(map_data["map"], True, map_data["clan1"], map_data["clan2"])
+
+    @staticmethod
+    def _decode_internal_map(map_: dict) -> Map:
+        map_data = map_["map"]
+        return Map(map_data["mapName"], map_data["wasPlayed"], map_data["homeScore"], map_data["awayScore"])
+
+    @staticmethod
+    def decode_map(source: TfSource, map_data: dict) -> Map:
+        func_ = getattr(TfDataDecoder, f"_decode_{source.name.lower()}_map")
+        return func_(map_data)
+
     @staticmethod
     def _decode_rgl_match(match_data: dict) -> Match:
+        """Decodes a dictionary containing match data pulled from the RGL public API
 
+        Args:
+            match_data (dict): data pulled from the RGL API (or in the same format)
+
+        Returns:
+            Match: A match object encapsulating the RGL match data passed in
+        """
+
+        # Isolate the home and away team IDs
         teams = match_data.get("teams", [])
-        home_team = next((team for team in teams if team["isHome"]), teams[0])["teamId"]
-        away_team = next(team for team in teams if team["teamId"] != home_team)["teamId"]
+        home_team = next((team for team in teams if team["isHome"]), next(team for team in teams if team["teamId"] == match_data["winner"]))["teamId"] if teams else None
+        away_team = next(team for team in teams if team["teamId"] != home_team)["teamId"] if teams else None
 
+        # Initialise the match with as much data as possible
         match = Match(
             SiteID.rgl_id(match_data["matchId"]),
             match_data.get("matchName", None),
@@ -110,20 +154,31 @@ class TfDataDecoder(json.JSONDecoder):
             SiteID.rgl_id(away_team)
         )
 
+        # Add map results if they exist in the data given
         for map_ in match_data.get("maps", []):
-            name, home_score, away_score = map_.get("mapName"), map_.get("homeScore"), map_.get("awayScore")
-            match.add_map_data(name, home_score is None and away_score is None, home_score or 0, away_score or 0)
+            match.add_map(TfDataDecoder.decode_map(TfSource.RGL, map_))
 
         return match
 
     @staticmethod
     def _decode_etf2l_match(match_data: dict) -> Match:
+        """Decodes a dictionary containing match data pulled from the ETF2L public API
 
+        Args:
+            match_data (dict): data pulled from the ETF2L API (or in the same format)
+
+        Returns:
+            Match: A match object encapsulating the ETF2L match data passed in
+        """
+
+        # Get the match name if it exists
         match_name = match_data.get("competition", {}).get("name", "") + " " + match_data.get("round", "")
 
+        # Find the IDs of the home and away teams
         home_team = match_data.get("clan1", {}).get("id", None)
         away_team = match_data.get("clan2", {}).get("id", None)
 
+        # Initialise with as much data as can be taken
         match = Match(
             SiteID.etf2l_id(match_data["id"]),
             match_name,
@@ -134,26 +189,31 @@ class TfDataDecoder(json.JSONDecoder):
             SiteID.etf2l_id(away_team)
         )
 
-        for map_ in match_data.get("map_results", []):
-            match.add_map_data(map_["map"], True, map_["clan1"], map_["clan2"])
+        # Add map data if it exists
+        map(lambda x: match.add_map(TfDataDecoder.decode_map(TfSource.ETF2L, x)), match.get("map_results", []))
 
         return match
 
     @staticmethod
-    def _decode_internal_match(match_data: dict) -> Match:
+    def _decode_internal_match(match_data_: dict) -> Match:
+        match_data = match_data_["match"]
         match = Match(
-            SiteID(TfSource[match_data["matchId"]["source"]], match_data["matchId"]["id"]),
+            match_data["matchId"],
             match_data["matchName"],
-            float(match_data["matchTime"] or 0),
+            float(match_data["matchTime"] or 0) or None,
             match_data["wasForfeit"],
-            SiteID(TfSource[match_data["eventId"]["source"]], match_data["eventId"]["id"]),
-            SiteID(TfSource[match_data["homeTeam"]["source"]], match_data["homeTeam"]["id"]),
-            SiteID(TfSource[match_data["awayTeam"]["source"]], match_data["awayTeam"]["id"]),
+            match_data["event"],
+            match_data["homeTeam"],
+            match_data["awayTeam"],
         )
-        for map_ in match_data["maps"]:
-            match.add_map_data(map_["mapName"], map_["wasPlayed"], int(map_["homeScore"]), int(map_["awayScore"]))
+        match.maps = match_data["maps"]
         return match
-    
+
+    @staticmethod
+    def decode_match(source: TfSource, match_data: dict) -> Match:
+        func_ = getattr(TfDataDecoder, f"_decode_{source.name.lower()}_match")
+        return func_(match_data)
+
     @staticmethod
     def _decode_rgl_team(team_data: dict) -> Team:
         return Team(
@@ -165,7 +225,7 @@ class TfDataDecoder(json.JSONDecoder):
             [SiteID.rgl_id(team) for team in team_data.get("linkedTeams", [])],
             [int(player["steamId"]) for player in team_data.get("players", [])]
         )
-    
+
     @staticmethod
     def _decode_etf2l_team(team_data: dict) -> Team:
         return Team(
@@ -177,7 +237,7 @@ class TfDataDecoder(json.JSONDecoder):
             [],
             [int(player["steam"]["id64"]) for player in team_data.get("players", [])]
         )
-    
+
     @staticmethod
     def _decode_internal_team(team_data: dict) ->Team:
         return Team(
@@ -191,16 +251,26 @@ class TfDataDecoder(json.JSONDecoder):
         )
 
     @staticmethod
-    def decode_match(source: TfSource, match_data: dict) -> Match:
-        func_ = getattr(TfDataDecoder, f"_decode_{source.name.lower()}_match")
-        return func_(match_data)
-    
-    @staticmethod
     def decode_team(source: TfSource, team_data: dict) -> Team:
         func_ = getattr(TfDataDecoder, f"_decode_{source.name.lower()}_team")
         return func_(team_data)
 
+    def __init__(self, *args, **kwargs):
+        json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
+
     def object_hook(self, obj):
+        """Overrided function for decoding data using json.load
+
+        Args:
+            obj (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        if "source" in obj:
+            return SiteID(int(obj["source"]["id"]), TfSource[obj["source"]["site"]])
+        if "map" in obj:
+            return TfDataDecoder.decode_map(TfSource.INTERNAL, obj)
         if "match" in obj:
             return TfDataDecoder.decode_match(TfSource.INTERNAL, obj)
         if "team" in obj:
@@ -208,8 +278,12 @@ class TfDataDecoder(json.JSONDecoder):
         return obj
 
 class TfDataEncoder(json.JSONEncoder):
-
+    """Custom JSON encoder for writing TF2 data to json files
+    """
     def default(self, o: Any) -> Any:
-        if isinstance(o, Match):
-            return {"match": o.to_dict()}
+
+        # Encode Map
+        if isinstance(o, (Map, SiteID, Match, Team)):
+            return o.serialize()
+
         return super().default(o)

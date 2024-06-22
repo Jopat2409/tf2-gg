@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 from utils.typing import SiteID
 
 class Map:
@@ -17,14 +18,19 @@ class Map:
         self.home_score = int(home_score)
         self.away_score = int(away_score)
 
-    def to_dict(self) -> dict:
+    def serialize(self) -> dict:
         return {
-            "mapName": self.map_name,
-            "wasPlayed": self.was_played,
-            "homeScore": self.home_score,
-            "awayScore": self.away_score
+            "map": {
+                "mapName": self.map_name,
+                "wasPlayed": self.was_played,
+                "homeScore": self.home_score,
+                "awayScore": self.away_score
+            }
         }
-    
+
+    def __repr__(self) -> str:
+        return f"Map: {self.map_name}" + (f" Home: {self.home_score} | Away: {self.away_score}" if self.was_played else "")
+
     def __eq__(self, other: Map) -> bool:
         if not isinstance(other, Map):
             return False
@@ -48,12 +54,12 @@ class Match:
 
     def __init__(self,
                     id_: SiteID,
-                    name: str | None = None,
-                    epoch: float | None = None,
-                    forfeit: bool | None = None,
-                    event: SiteID | None = None,
-                    home_team: SiteID | None = None,
-                    away_team: SiteID | None = None) -> None:
+                    name: Optional[str] = None,
+                    epoch: Optional[float] = None,
+                    forfeit: Optional[bool] = None,
+                    event: Optional[SiteID] = None,
+                    home_team: Optional[SiteID] = None,
+                    away_team: Optional[SiteID] = None) -> None:
         self.match_id = id_
         self.name = name
         self.epoch = epoch
@@ -69,18 +75,23 @@ class Match:
     def add_map_data(self, name: str, played: bool, home_score: int = 0, away_score: int = 0) -> None:
         self.maps.append(Map(name, played, home_score, away_score))
 
-    def to_dict(self) -> dict:
+    def serialize(self) -> dict:
         return {
-            "matchId": self.match_id.to_dict(),
-            "matchName": self.name,
-            "matchTime": self.epoch,
-            "wasForfeit": self.was_forfeit,
-            "event": self.event_id.to_dict(),
-            "homeTeam": self.home_team.to_dict(),
-            "awayTeam": self.away_team.to_dict(),
-            "maps": [map_.to_dict() for map_ in self.maps]
-        }
-    
+            "match": {
+                "matchId": self.match_id,
+                "matchName": self.name,
+                "matchTime": self.epoch,
+                "wasForfeit": self.was_forfeit,
+                "event": self.event_id,
+                "homeTeam": self.home_team,
+                "awayTeam": self.away_team,
+                "maps": self.maps
+                }
+            }
+
+    def __repr__(self) -> str:
+        return f"Match: {self.match_id}, Name: {self.name}, Time: {self.epoch}, Maps: {self.maps}"
+
     def __eq__(self, other: Match):
         if not isinstance(other, Match):
             return False
