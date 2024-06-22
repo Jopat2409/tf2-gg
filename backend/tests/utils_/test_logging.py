@@ -37,12 +37,12 @@ def test_log_file():
 def test_logger_object():
     assert test_logger.caller == "test_logging.py"
 
-    Logger.init("tests\\utils\\logs", "test", False)
-    assert os.path.isdir("tests\\utils\\logs")
+    Logger.init("tests\\utils_\\logs", "test", False)
+    assert os.path.isdir("tests\\utils_\\logs")
 
     # Test "describes" wrapper
     _func2("hello")
     assert Logger.log_file.log_message_buffer[-1] == """[INFO] [test_logging.py] A test function [args: ('hello',) kwargs: {}]\n"""
 
     test_logger.write()
-    shutil.rmtree("tests\\utils\\logs")
+    shutil.rmtree("tests\\utils_\\logs")
