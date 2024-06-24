@@ -172,7 +172,7 @@ class TfDataDecoder(json.JSONDecoder):
         """
 
         # Get the match name if it exists
-        match_name = match_data.get("competition", {}).get("name", "") + " " + match_data.get("round", "")
+        match_name = (match_data.get("competition", {}).get("name", "") + f' {match_data.get("round", "")}').strip() or None
 
         # Find the IDs of the home and away teams
         home_team = match_data.get("clan1", {}).get("id", None)
@@ -190,7 +190,8 @@ class TfDataDecoder(json.JSONDecoder):
         )
 
         # Add map data if it exists
-        map(lambda x: match.add_map(TfDataDecoder.decode_map(TfSource.ETF2L, x)), match.get("map_results", []))
+        for map_ in match_data.get("map_results", []):
+            match.add_map(TfDataDecoder.decode_map(TfSource.ETF2L, map_))
 
         return match
 
@@ -199,14 +200,14 @@ class TfDataDecoder(json.JSONDecoder):
         match_data = match_data_["match"]
         match = Match(
             match_data["matchId"],
-            match_data["matchName"],
-            float(match_data["matchTime"] or 0) or None,
-            match_data["wasForfeit"],
-            match_data["event"],
-            match_data["homeTeam"],
-            match_data["awayTeam"],
+            match_data.get("matchName", None),
+            float(match_data.get("matchTime", None) or 0) or None,
+            match_data.get("wasForfeit", None),
+            match_data.get("event", None),
+            match_data.get("homeTeam", None),
+            match_data.get("awayTeam", None),
         )
-        match.maps = match_data["maps"]
+        match.maps = match_data.get("maps", [])
         return match
 
     @staticmethod

@@ -11,12 +11,14 @@ class Map:
     def __init__(self,
                     name: str,
                     played: bool,
-                    home_score: int,
-                    away_score: int):
+                    home_score: Optional[int] = None,
+                    away_score: Optional[int] = None):
+
         self.map_name = name
         self.was_played = played
-        self.home_score = int(home_score)
-        self.away_score = int(away_score)
+
+        self.home_score = int(home_score) if self.was_played else None
+        self.away_score = int(away_score) if self.was_played else None
 
     def serialize(self) -> dict:
         return {

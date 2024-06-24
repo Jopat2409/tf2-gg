@@ -29,16 +29,16 @@ def read_required(  file: str,
     """
     Reads data from a `file` that MUST exist at read-time. Performs all necessary checks and error handling
 
-    params:
-        file[str]: the path to the file
-        warn_not_exists[str]: message to log if the file does not exist
-        warn_io_error[str]: message to log if the program encounters an error when reading
-        json[bool]: whether to return the file as a json object (defaults to str)
-        encoding[str]: file encoding (default utf-8)
-        throws[bool]: whether this function should raise an exception on error or not
+    Args:
+        file (str): the path to the file.
+        warn_not_exists (str): message to log if the file does not exist.
+        warn_io_error (str): message to log if the program encounters an error when reading.
+        json (bool): whether to return the file as a json object. (defaults to str)
+        encoding (str): file encoding. (default utf-8)
+        throws (bool): whether this function should raise an exception on error or not.
 
-    returns:
-        The file data as a string, or as a json object if the `json` parameter is specified
+    Returns:
+        Optional[str]: The file data as a string, or as a json object if the `json` parameter is specified
     """
 
     if not os.path.isfile(file):
