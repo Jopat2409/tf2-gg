@@ -262,11 +262,17 @@ class TfDataDecoder(json.JSONDecoder):
     def object_hook(self, obj):
         """Overrided function for decoding data using json.load
 
+        Currently supports:
+            - `SiteID`
+            - `Map`
+            - `Match`
+            - `Team`
+
         Args:
-            obj (_type_): _description_
+            obj (Any): The list / dict that is being parsed by the JSON decoder
 
         Returns:
-            _type_: _description_
+            Any: The class if the object being decoded is a tf2 class otherwise the default decoding
         """
         if "source" in obj:
             return SiteID(int(obj["source"]["id"]), TfSource[obj["source"]["site"]])
@@ -280,6 +286,12 @@ class TfDataDecoder(json.JSONDecoder):
 
 class TfDataEncoder(json.JSONEncoder):
     """Custom JSON encoder for writing TF2 data to json files
+
+    Supports the encoding of:
+        - `SiteID`
+        - `Map`
+        - `Match`
+        - `Team`
     """
     def default(self, o: Any) -> Any:
 

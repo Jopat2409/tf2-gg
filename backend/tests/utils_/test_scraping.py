@@ -7,18 +7,35 @@ from utils.scraping import TfDataDecoder, TfDataEncoder
 from utils.file import read_required
 
 def test_tfdata_encode_map():
+    """
+    Tests the JSON encoding function used to encode `Map` objects
+    """
     assert json.dumps(Map("pl_badwater", True, 4, 5), cls=TfDataEncoder) == """{"map": {"mapName": "pl_badwater", "wasPlayed": true, "homeScore": 4, "awayScore": 5}}"""
     assert json.dumps(Map("koth_bagel_rc6", False), cls=TfDataEncoder) == """{"map": {"mapName": "koth_bagel_rc6", "wasPlayed": false, "homeScore": null, "awayScore": null}}"""
     assert json.dumps(Map("koth_bagel_rc6", False, 1, 2), cls=TfDataEncoder) == """{"map": {"mapName": "koth_bagel_rc6", "wasPlayed": false, "homeScore": null, "awayScore": null}}"""
 
 def test_tfdata_encode_id():
+    """
+    Tests the JSON encoding function used to encode `SiteID` objects
+    """
     assert json.dumps(SiteID.rgl_id(32), cls=TfDataEncoder) == """{"source": {"site": "RGL", "id": 32}}"""
     assert json.dumps(SiteID.etf2l_id(32), cls=TfDataEncoder) == """{"source": {"site": "ETF2L", "id": 32}}"""
     assert json.dumps(SiteID.etf2l_id(None), cls=TfDataEncoder) == 'null'
 
 def test_tfdata_encode_match():
+    """
+    Tests the JSON encoding function used to encode `Match` objects
+    """
     assert json.dumps(Match(SiteID.rgl_id(32)), cls=TfDataEncoder) == """{"match": {"matchId": {"source": {"site": "RGL", "id": 32}}, "matchName": null, "matchTime": null, "wasForfeit": null, "event": null, "homeTeam": null, "awayTeam": null, "maps": []}}"""
     assert json.dumps(Match(SiteID.etf2l_id(32)), cls=TfDataEncoder) == """{"match": {"matchId": {"source": {"site": "ETF2L", "id": 32}}, "matchName": null, "matchTime": null, "wasForfeit": null, "event": null, "homeTeam": null, "awayTeam": null, "maps": []}}"""
+
+    rgl_match = Match(SiteID.rgl_id(32), "Rewind 2 Grand Finals", 1497490200.0, False, SiteID.rgl_id(30), SiteID.rgl_id(41), SiteID.rgl_id(54))
+    rgl_match.add_map(Map("pl_badwater", True, 1, 4))
+    assert json.dumps(rgl_match, cls=TfDataEncoder) == """{"match": {"matchId": {"source": {"site": "RGL", "id": 32}}, "matchName": "Rewind 2 Grand Finals", "matchTime": 1497490200.0, "wasForfeit": false, "event": {"source": {"site": "RGL", "id": 30}}, "homeTeam": {"source": {"site": "RGL", "id": 41}}, "awayTeam": {"source": {"site": "RGL", "id": 54}}, "maps": [{"map": {"mapName": "pl_badwater", "wasPlayed": true, "homeScore": 1, "awayScore": 4}}]}}"""
+
+    etf2l_match = Match(SiteID.etf2l_id(32), "Rewind 2 Grand Finals", 1497490200.0, False, SiteID.etf2l_id(30), SiteID.etf2l_id(41), SiteID.etf2l_id(54))
+    etf2l_match.add_map(Map("pl_badwater", True, 1, 4))
+    assert json.dumps(etf2l_match, cls=TfDataEncoder) == """{"match": {"matchId": {"source": {"site": "ETF2L", "id": 32}}, "matchName": "Rewind 2 Grand Finals", "matchTime": 1497490200.0, "wasForfeit": false, "event": {"source": {"site": "ETF2L", "id": 30}}, "homeTeam": {"source": {"site": "ETF2L", "id": 41}}, "awayTeam": {"source": {"site": "ETF2L", "id": 54}}, "maps": [{"map": {"mapName": "pl_badwater", "wasPlayed": true, "homeScore": 1, "awayScore": 4}}]}}"""
 
 def test_tfdata_decode_map():
     test_map = {"mapName": "koth_bagel_rc6", "wasPlayed": True, "homeScore": 1, "awayScore": 2}
