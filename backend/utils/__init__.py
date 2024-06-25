@@ -1,3 +1,5 @@
+"""Custom helper functions, classes and decorators that are reused throught the backend
+"""
 from utils.logger import Logger
 from utils.file import TempFile, ConstFile
 from datetime import datetime

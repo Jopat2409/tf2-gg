@@ -10,6 +10,7 @@ from multiprocessing import Pool
 
 from db.team import Team
 from db.match import Match, Map
+from db.player import Player
 
 from utils import epoch_from_timestamp
 from utils.typing import TfSource, SiteID
@@ -219,12 +220,12 @@ class TfDataDecoder(json.JSONDecoder):
     def _decode_rgl_team(team_data: dict) -> Team:
         return Team(
             SiteID.rgl_id(team_data["teamId"]),
-            team_data.get("name", None),
-            team_data.get("tag", None),
+            team_data.get("teamName", team_data.get("name", None)),
+            team_data.get("teamTag", team_data.get("tag", None)),
             epoch_from_timestamp(team_data.get("createdAt", 0)) or None,
             epoch_from_timestamp(team_data.get("updatedAt", 0)) or None,
             [SiteID.rgl_id(team) for team in team_data.get("linkedTeams", [])],
-            [int(player["steamId"]) for player in team_data.get("players", [])]
+            [{"player": player["steamId"], "joinedAt": epoch_from_timestamp(player["joinedAt"]), "leftAt": epoch_from_timestamp(player["leftAt"]) or None} for player in team_data.get("players", [])]
         )
 
     @staticmethod
@@ -256,6 +257,27 @@ class TfDataDecoder(json.JSONDecoder):
         func_ = getattr(TfDataDecoder, f"_decode_{source.name.lower()}_team")
         return func_(team_data)
 
+    @staticmethod
+    def _decode_rgl_player(player_data: dict) -> Player:
+        return Player(player_data["steamId"], player_data["name"], player_data["avatar"])
+
+    @staticmethod
+    def _decode_internal_player(player_data_: dict) -> Player:
+        player_data = player_data_["player"]
+        print(player_data)
+        return Player(
+            player_data["steamId"],
+            player_data.get("displayName", None),
+            player_data.get("avatar", None),
+            player_data.get("forename", None),
+            player_data.get("surname", None)
+        )
+
+    @staticmethod
+    def decode_player(source: TfSource, player_data: dict):
+        func_ = getattr(TfDataDecoder, f"_decode_{source.name.lower()}_player")
+        return func_(player_data)
+
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
 
@@ -282,6 +304,8 @@ class TfDataDecoder(json.JSONDecoder):
             return TfDataDecoder.decode_match(TfSource.INTERNAL, obj)
         if "team" in obj:
             return TfDataDecoder.decode_team(TfSource.INTERNAL, obj)
+        if "player" in obj:
+            return TfDataDecoder.decode_player(TfSource.INTERNAL, obj)
         return obj
 
 class TfDataEncoder(json.JSONEncoder):
@@ -292,11 +316,12 @@ class TfDataEncoder(json.JSONEncoder):
         - `Map`
         - `Match`
         - `Team`
+        - `Player`
     """
     def default(self, o: Any) -> Any:
 
         # Encode Map
-        if isinstance(o, (Map, SiteID, Match, Team)):
+        if isinstance(o, (Map, SiteID, Match, Team, Player)):
             return o.serialize()
 
         return super().default(o)

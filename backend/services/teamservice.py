@@ -4,12 +4,15 @@ All functions related to scraping team and roster data from the three main tf2 A
     - ETF2L (coming soon!)
     - UGC (don't have API so will have to scrape)
 """
+
+import requests
+
 from db.team import Team
 from db.match import Match
 
 from utils.logger import Logger
 from utils.typing import SiteID, TfSource
-from utils.scraping import scrape_parallel, TfDataDecoder
+from utils.scraping import scrape_parallel, TfDataDecoder, epoch_from_timestamp
 
 # Setup logging
 team_logger = Logger.get_logger()
@@ -42,3 +45,11 @@ def scrape_rgl_rosters(team_ids: list[SiteID]) -> list[Team]:
 
     team_logger.log_info(f"Added {len(teams)} new rosters", start='\n')
     return teams
+
+def scrape_team(team_id: SiteID):
+    if team_id.get_source() == TfSource.RGL:
+        new_data = requests.get(f"https://api.rgl.gg/v0/teams/{team_id.get_id()}")
+        if new_data.status_code != 200:
+            return None
+        return TfDataDecoder.decode_team(TfSource.RGL, new_data.json())
+    return None

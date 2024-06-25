@@ -1,66 +1,64 @@
-from database import db_session
-from sqlalchemy import func
-from utils.logger import Logger
-from utils.file import read_or_create
-from utils.scraping import scrape_parallel
-from models import Player
-import json
+import requests
+from typing import Optional
 
-__logger = Logger.get_logger()
+from db.player import Player
+from db.team import Team
 
-def scrape_player_data(infile: str, outfile: str, verbose: bool = False):
+from utils.scraping import TfDataDecoder, epoch_from_timestamp
+from utils.typing import TfSource
 
-    with open(infile, "r") as f:
-        roster_data = json.load(f)
-    __logger.log_info("Scraping player data")
+def _scrape_player_teams_rgl(steam_id: int) -> list[Team]:
 
-    player_data = read_or_create(outfile, {})
+    # Query API
+    teams = requests.get(f"https://api.rgl.gg/v0/profile/{steam_id}/teams")
 
-    players = set([player["steamId"] for roster in roster_data for player in roster_data[roster]["players"]])
-    urls = [f"https://api.rgl.gg/v0/profile/{_id}" for _id in players if str(_id) not in player_data.keys()]
+    # Return empty list if failure
+    if teams.status_code != 200:
+        return []
 
-    if not urls:
-        __logger.log_info("No new players to scrape")
-        return
+    # Parse team and add player to the team player list
+    def parse_team(team):
+        parsed_team = TfDataDecoder.decode_team(TfSource.RGL, team)
+        parsed_team.add_player(steam_id, epoch_from_timestamp(team["startedAt"]), epoch_from_timestamp(team["leftAt"]) or None)
+        return parsed_team
 
-    for i, results in enumerate(scrape_parallel(urls, batch_size=9)):
-        __logger.log_info(f"Scraping players {len(player_data.keys()) * 100 / len(players):.2f}%", end='\r')
-        for result in results:
-            player_data.update({result['steamId']: result})
+    # list comp!
+    return list(map(parse_team, teams.json()))
 
-        if i % 10 == 0:
-            with open(outfile, "w") as f:
-                json.dump(player_data, f)
-    __logger.log_info(f"Added {len(urls)} new players to database", start='\n')
-    with open(outfile, "w") as f:
-        json.dump(player_data, f)
+def _scrape_player_teams_etf2l(steam_id: int) -> list[Team]:
 
+    # TODO: Fix this method!! I HATE ETF2L API!!!
+    return []
 
-def insert_player(player_data: dict) -> bool:
+    # Query API
+    teams = requests.get(f"https://api-v2.etf2l.org/player/{steam_id}")
 
-    if Player.query.filter(Player.steam_id == int(player_data['steamId'])).first():
-        return False
+    # Return empty list if failure
+    if teams.status_code != 200:
+        return []
 
-    to_add = Player(int(player_data["steamId"]), player_data["name"], bool(player_data["status"]["isBanned"]), bool(player_data["status"]["isVerified"]), player_data["avatar"])
-    db_session.add(to_add)
-    db_session.commit()
-    return True
+    # Parse team and add player
+    def parse_team(team):
+        parsed_team = TfDataDecoder.decode_team(TfSource.ETF2L, team)
+        parsed_team.add_player(steam_id, epoch_from_timestamp(team["startedAt"]), epoch_from_timestamp(team["leftAt"]) or None)
+        return parsed_team
 
-def insert_players(infile: str, verbose: bool = False) -> None:
+    return list(map(parse_team, teams.json()))
 
-    with open(infile, "r") as f:
-        players = json.load(f)
+def scrape_player_teams(steam_id: int) -> list[Team]:
+    teams: list[Team] = _scrape_player_teams_rgl(steam_id) + _scrape_player_teams_etf2l(steam_id)
+    return teams
 
-    if len(players) == db_session.query(func.count(Player.steam_id)).first()[0]:
-        __logger.log_info("No new players to add to database")
-        return
+def scrape_player_data(steam_id) -> Optional[Player]:
+    """Scrapes the data of a single player. Uses RGL info as a default if player info exists for all platforms
 
-    num_added = 0
-    for i, player in enumerate(players):
-        __logger.log_info(f"Inserting players {i * 100 / len(players):.2f}%", end='\r')
-        num_added += insert_player(players[player])
+    Args:
+        steam_id (_type_): _description_
 
-    __logger.log_info(f"Inserted {num_added} new players to database", start='\n')
-
-def update(verbose: bool = False):
-    scrape_player_data(infile="data\\rgl_roster_data.json", outfile="data\\rgl_player_data.json", verbose=verbose)
+    Returns:
+        Optional[Player]: _description_
+    """
+    player_data = requests.get(f"https://api.rgl.gg/v0/profile/{steam_id}")
+    if player_data.status_code != 200:
+        return None
+    return TfDataDecoder.decode_player(TfSource.RGL, player_data.json())
