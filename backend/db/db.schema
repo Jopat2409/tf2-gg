@@ -1,0 +1,61 @@
+CREATE TABLE players (
+    steam_id INTEGER PRIMARY KEY NOT NULL,
+    alias TEXT,
+    avatar TEXT,
+    forename TEXT,
+    surname TEXT
+);
+
+CREATE TABLE rosters (
+    roster_id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    source INTEGER,
+    source_id INTEGER,
+
+    team_name TEXT,
+    team_tag TEXT,
+
+    created_at FLOAT,
+    updated_at FLOAT,
+
+    UNIQUE (source, source_id)
+);
+
+CREATE TABLE roster_player_association (
+    roster_id INTEGER,
+    player_id INTEGER,
+    joined_at FLOAT,
+    left_at FLOAT,
+
+    PRIMARY KEY (roster_id, player_id, joined_at)
+    FOREIGN KEY (roster_id) REFERENCES rosters (roster_id),
+    FOREIGN KEY (player_id) REFERENCES players (steam_id)
+);
+
+CREATE TABLE roster_roster_association (
+    main_roster INTEGER,
+    linked_roster INTEGER,
+
+    PRIMARY KEY (main_roster, linked_roster),
+    FOREIGN KEY (main_roster) REFERENCES rosters (roster_id),
+    FOREIGN KEY (linked_roster) REFERENCES rosters (roster_id)
+);
+
+CREATE TABLE matches (
+    match_id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+
+    source INTEGER,
+    source_id INTEGER,
+
+    match_name TEXT,
+    match_epoch FLOAT,
+
+    event_id INTEGER,
+    was_forfeit BOOLEAN,
+    home_team INTEGER,
+    away_team INTEGER,
+
+    FOREIGN KEY (event_id) REFERENCES events (event_id),
+    FOREIGN KEY (home_team) REFERENCES rosters (roster_id),
+    FOREIGN KEY (away_team) REFERENCES rosters (roster_id)
+);
