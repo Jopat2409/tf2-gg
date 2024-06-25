@@ -1,66 +1,62 @@
-from models import Team
+import pytest
 
-def test_team_constructor(session):
+from db.team import Team, insert_team, get_team, update_team, get_roster_id
+from db.player import Player, get_player
 
-    team_1 = Team()
-    assert Team.count() == 0
+from utils.typing import SiteID
 
-    team_2 = Team(10)
-    assert team_2.team_id == 10
-    assert Team.count() == 0
+def test_team_constructor():
 
-    del team_1
+    assert Team(SiteID.rgl_id(40)).team_id == SiteID.rgl_id(40)
 
-    assert not Team._CACHEIDS_UNCOMMITTED_IDS
-    assert not Team._STAGEDMODEL_STAGED_OBJECTS
+    with pytest.raises(ValueError):
+        Team(10)
 
-def test_team_stage(session):
-    # Normal stage
-    t = Team()
-    t.stage(session)
-    assert Team.count() == 0
-    session.commit()
-    assert Team.count() == 1
+def test_team_methods():
 
-    # Staging a team with a team ID that already exists simply does nothing
-    t_2 = Team(t.team_id)
-    t_2.stage(session)
-    session.commit()
-    assert Team.count() == 1
+    team = Team(SiteID.rgl_id(10))
+    team.add_player(12345, 190, 200)
+    assert team.players[0]["joinedAt"] == 190.0
+    assert team.players[0]["leftAt"] == 200.0
 
-    # Test not insert with double stage before commit
-    team_3 = Team(1234)
-    team_4 = Team(1234)
-    team_3.stage(session)
-    team_4.stage(session)
-    session.commit()
-    assert Team.count() == 2
+def test_db_operations():
+    froyotech = Team(
+        SiteID.rgl_id(41),
+        "froyotech",
+        "FROYO",
+        1234567,
+        1234566
+    )
 
-def test_team_insert(session):
+    assert insert_team(froyotech)
+    assert not insert_team(froyotech)
 
-    # Standard insert
-    print(f"IDS: {Team._CACHEIDS_UNCOMMITTED_IDS}")
-    print(f"STAGED: {Team._STAGEDMODEL_STAGED_OBJECTS}")
-    team = Team.insert(session)
-    print(team.team_id)
-    assert Team.get(team.team_id).team_id == 1
+    assert get_team(1) == froyotech
+    assert get_team(SiteID.rgl_id(41)) == froyotech
 
-    # Insert without commit
-    team_2 = Team.insert(session, commit=False)
-    assert team_2.team_id == 2
-    assert Team.get(team_2.team_id) is None
-    session.commit()
-    assert Team.get(team_2.team_id).team_id == 2
+    assert get_roster_id(SiteID.rgl_id(41)) == 1
 
-    assert Team.insert(session, 1) is None
+    g6 = Team(
+        SiteID.rgl_id(32),
+        "like a g6",
+        "G6",
+        1284798216,
+        129847827,
+        players=[{"steamId": 122345, "joinedAt": 9274981.0, "leftAt": None}]
+    )
 
+    assert insert_team(g6)
+    assert get_team(2) == g6
+    assert get_team(SiteID.rgl_id(32)) == g6
+    assert get_player(122345) == Player(122345)
 
-def test_get_or_insert(session):
-    Team.insert(session, 1)
+    g6.name = "like a g7 :o"
+    g6.tag = "G7"
+    g6.add_player(420, 123094123)
 
-    assert Team.get_or_insert(1, session).team_id == 1
-    assert Team.count() == 1
+    assert update_team(g6)
 
-    assert Team.get_or_insert(2, session).team_id == 2
-    assert Team.get(2) is not None
-    assert Team.count() == 2
+    assert get_team(2) == g6
+    assert len(get_team(2).players) == 2
+
+    assert not update_team(Team(SiteID.rgl_id(12374)))

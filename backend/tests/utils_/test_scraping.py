@@ -1,10 +1,54 @@
+import time
 import json
 
 from db.match import Map, Match
+from db.team import Team
 
 from utils.typing import SiteID, TfSource
-from utils.scraping import TfDataDecoder, TfDataEncoder
+from utils.scraping import TfDataDecoder, TfDataEncoder, scrape_parallel, sleep_then_request, get_first
 from utils.file import read_required
+
+def test_sleep_then_request():
+    start_time = time.perf_counter()
+    sleep_then_request(("https://www.google.com", 1.0))
+    assert time.perf_counter() - start_time > 1
+
+def test_get_first():
+
+    test = [f"test{i}" for i in range(10)]
+    assert get_first(test, 1) == ["test0"]
+    assert get_first(test, 0) == []
+    assert get_first(test, 10) == test
+
+    test2 = ["hello :)"]
+    assert get_first(test2, 10) == test2
+
+    assert get_first([], 10) == []
+
+def test_scrape_parallel():
+    test_matches = [f"https://api.rgl.gg/v0/matches/{_id}" for _id in [32, 33, 34, 35, 36, 37, 38, 39, 40]]
+
+    # test even number of batch size
+    results = []
+    for result in scrape_parallel(test_matches, 3):
+        results += result
+
+    assert len(results) == 9
+
+    # Test batch size not divisible by length
+    results = []
+    for result in scrape_parallel(test_matches, 4):
+        print(result)
+        results += result
+
+    assert len(results) == 9
+
+    # Test batch size bigger than length
+    results = []
+    for result in scrape_parallel(test_matches, 10):
+        results += result
+
+    assert len(results) == 9
 
 def test_tfdata_encode_map():
     """
@@ -36,6 +80,10 @@ def test_tfdata_encode_match():
     etf2l_match = Match(SiteID.etf2l_id(32), "Rewind 2 Grand Finals", 1497490200.0, False, SiteID.etf2l_id(30), SiteID.etf2l_id(41), SiteID.etf2l_id(54))
     etf2l_match.add_map(Map("pl_badwater", True, 1, 4))
     assert json.dumps(etf2l_match, cls=TfDataEncoder) == """{"match": {"matchId": {"source": {"site": "ETF2L", "id": 32}}, "matchName": "Rewind 2 Grand Finals", "matchTime": 1497490200.0, "wasForfeit": false, "event": {"source": {"site": "ETF2L", "id": 30}}, "homeTeam": {"source": {"site": "ETF2L", "id": 41}}, "awayTeam": {"source": {"site": "ETF2L", "id": 54}}, "maps": [{"map": {"mapName": "pl_badwater", "wasPlayed": true, "homeScore": 1, "awayScore": 4}}]}}"""
+
+def test_tfdata_encode_team():
+    assert json.dumps(Team(SiteID.rgl_id(41)), cls=TfDataEncoder) == """{"team": {"teamId": {"source": {"site": "RGL", "id": 41}}, "teamName": null, "teamTag": null, "createdAt": null, "updatedAt": null, "players": [], "linkedTeams": []}}"""
+    assert json.dumps(Team(SiteID.etf2l_id(41)), cls=TfDataEncoder) == """{"team": {"teamId": {"source": {"site": "ETF2L", "id": 41}}, "teamName": null, "teamTag": null, "createdAt": null, "updatedAt": null, "players": [], "linkedTeams": []}}"""
 
 def test_tfdata_decode_map():
     test_map = {"mapName": "koth_bagel_rc6", "wasPlayed": True, "homeScore": 1, "awayScore": 2}
