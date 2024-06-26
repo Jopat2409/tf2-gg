@@ -1,7 +1,8 @@
+import time
 import pytest
 
-from db.team import Team, insert_team, get_team, update_team, get_roster_id
-from db.player import Player, get_player
+from db.team import Team, insert_team, get_team, update_team, get_roster_id, insert_teams
+from db.player import Player, get_player, get_current_teams, get_teams
 
 from utils.typing import SiteID
 
@@ -60,3 +61,40 @@ def test_db_operations():
     assert len(get_team(2).players) == 2
 
     assert not update_team(Team(SiteID.rgl_id(12374)))
+
+def test_team_player_operations():
+
+    # invaild player id
+    assert get_current_teams(-100) == get_teams(-100) == []
+
+    # valid player id but no teams
+    assert get_current_teams(76561197970669109) == get_teams(76561197970669109) == []
+
+    # Valid teams
+    current_teams = get_current_teams(122345)
+    assert len(current_teams) == 1
+    assert current_teams[0].team_id == SiteID.rgl_id(32)
+
+def test_insert_teams():
+
+    assert insert_teams([Team(SiteID.rgl_id(x)) for x in range(20000, 21000)])
+
+    for i in range(20000, 21000):
+        assert get_team(SiteID.rgl_id(i))
+
+def test_timeit_insert():
+    test_teams_1 = [Team(SiteID.rgl_id(x)) for x in range(4000, 5000)]
+    test_teams_2 = [Team(SiteID.rgl_id(x)) for x in range(6000, 7000)]
+
+    t = time.perf_counter_ns()
+    insert_teams(test_teams_1)
+    avg_teams = (time.perf_counter_ns() - t) / 1e3
+    print(f"Average for bulk: {avg_teams}")
+
+    t = time.perf_counter_ns()
+    for x in test_teams_2:
+        insert_team(x)
+    avg_team = (time.perf_counter_ns() - t) / 1e3
+    print(f"Average for non bulk: {avg_team}")
+
+    assert 1 == 0

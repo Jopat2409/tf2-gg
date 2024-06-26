@@ -68,10 +68,41 @@ def insert_player(player: Player) -> bool:
     """
     try:
         update_db("INSERT INTO players (steam_id, alias, avatar, forename, surname) VALUES (?, ?, ?, ?, ?)", (player.steam_id, player.alias, player.avatar, player.forename, player.surname,))
-        player_logger.log_info(f"Inserted player {player.steam_id}")
     except sqlite3.IntegrityError as _:
         player_logger.log_warn(f"Player {player.steam_id} already exists in database")
         return False
+    return True
+
+def insert_players(players: list[Player]) -> bool:
+    """Function for bulk-inserting players into the database. Uses bulk queries for checking integrity errors
+    and insertion to make it faster for large arrays of players.
+
+    This function is faster than looping and calling `insert_player` manually when the number of players is greater than around 7,
+    but the difference for smaller values of n is minimal so it almost always makes sense to just use this method
+
+    Args:
+        players (list[Player]): players to insert into the database.
+
+    Returns:
+        bool: `False` if all players were already present in the database, else `True`
+    """
+
+    # Find which players are not already in the database
+    disallowed_players = [p["steam_id"] for p in query_db("SELECT steam_id FROM players WHERE steam_id IN ("+ "?,"*(len(players) - 1) + "?);", tuple(p.steam_id for p in players))]
+    allowed_players = [p for p in players if p.steam_id not in disallowed_players]
+
+    # If there is nothing to add then return failure
+    if not allowed_players:
+        return False
+
+    # Construct the bulk statement and bindings
+    stmt = "INSERT INTO players (steam_id, alias, avatar, forename, surname) VALUES " + "(?, ?, ?, ?, ?), "*(len(allowed_players) - 1) + "(?, ?, ?, ?, ?);"
+    bindings = ((p.steam_id, p.alias, p.avatar, p.forename, p.surname) for p in allowed_players)
+    bindings = tuple(e for tupl in bindings for e in tupl)
+
+    # Run the INSERT query
+    update_db(stmt, bindings)
+
     return True
 
 def get_player(steam_id: int) -> Optional[Player]:
@@ -121,7 +152,8 @@ def get_teams(steam_id: int) -> list:
     Returns:
         list[Team]: List of team objects representing the teams the player has been a part of
     """
-    return query_db("SELECT r.rosterId, r.joinedAt, r.leftAt, rosters.team_name AS teamName, rosters.team_tag AS teamTag FROM (SELECT roster_id AS rosterId, joined_at AS joinedAt, left_at AS leftAt FROM roster_player_association WHERE player_id = ?) AS r INNER JOIN rosters ON r.rosterId = rosters.roster_id", (steam_id,))
+    team_data = query_db("SELECT r.rosterId, r.joinedAt, r.leftAt, rosters.team_name AS teamName, rosters.team_tag AS teamTag FROM (SELECT roster_id AS rosterId, joined_at AS joinedAt, left_at AS leftAt FROM roster_player_association WHERE player_id = ?) AS r INNER JOIN rosters ON r.rosterId = rosters.roster_id", (steam_id,))
+    return team_data
 
 def get_current_teams(steam_id: int) -> list:
     """Gets all teams that the given player is still currently a part of

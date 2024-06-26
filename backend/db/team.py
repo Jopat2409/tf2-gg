@@ -101,11 +101,21 @@ def get_team(team_id: int | SiteID) -> Optional[Team]:
     return team
 
 def insert_team(team: Team) -> bool:
+    """Inserts a team into the database if the corresponding team source ID does not exist already in the database
+
+    Also inserts all players that are in the team to the database (if they are not already present), and creates an association
+    in the database between the team and the player
+
+    Args:
+        team (Team): The team to insert into the database
+
+    Returns:
+        bool: `True` if the team was successfully inserted, otherwise `False`
+    """
     from db.player import add_to_team, insert_player, Player
 
     try:
         update_db("INSERT INTO rosters (source, source_id, team_name, team_tag, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", (team.team_id.get_source(), team.team_id.get_id(), team.name, team.tag, team.created, team.updated,))
-        team_logger.log_info(f"Inserted team {team.team_id}")
     except sqlite3.IntegrityError as _:
         team_logger.log_warn(f"Team {team.team_id} already exists in database")
         return False
@@ -117,7 +127,52 @@ def insert_team(team: Team) -> bool:
 
     return True
 
+def insert_teams(teams: list[Team]) -> bool:
+    """Bulk inserts teams into the database
+
+    Bulk inserts all players from all the teams, and bulk adds association records. This method is about 2 orders of magnitude
+    faster than just manually looping and inserting so just use this whenever you could possibly be inserting more than one team
+
+    Args:
+        teams (list[Team]): list of teams to insert into the database.
+
+    Returns:
+        bool: `False` if none of the teams are added into the database, else `True`
+    """
+    from db.player import insert_players, Player, add_to_team
+
+    # Ensure all players are in the database
+    insert_players([Player(p["steamId"]) for team in teams for p in team.players])
+
+    disallowed_teams = query_db("SELECT source_id, source FROM rosters WHERE source_id IN ("+ "?,"*(len(teams) - 1) + "?);", (*tuple(t.team_id.get_id() for t in teams),))
+    allowed_teams = [t for t in teams if {"source": t.team_id.get_source(), "source_id": t.team_id.get_id()} not in disallowed_teams]
+
+    if not allowed_teams:
+        return False
+
+    # Construct bulk query
+    stmt = "INSERT INTO rosters (source, source_id, team_name, team_tag, created_at, updated_at) VALUES " + "(?, ?, ?, ?, ?, ?), "*(len(allowed_teams) - 1) + "(?, ?, ?, ?, ?, ?);"
+
+    # Flatten binding values
+    bindings = ((t.team_id.get_source(), t.team_id.get_id(), t.name, t.tag, t.created, t.updated) for t in allowed_teams)
+    bindings = tuple(e for tupl in bindings for e in tupl)
+    update_db(stmt, bindings)
+
+    # TODO: Figure out how to bulk this up :3
+    for team_id, player in [(team.team_id, player) for team in teams for player in team.players]:
+        add_to_team(player["steamId"], get_roster_id(team_id), player["joinedAt"], player["leftAt"])
+
+    return True
+
 def update_team(team: Team) -> bool:
+    """Updates the given team
+
+    Args:
+        team (Team): _description_
+
+    Returns:
+        bool: _description_
+    """
 
     if not get_team(team.team_id):
         return False
@@ -127,6 +182,7 @@ def update_team(team: Team) -> bool:
     update_db("UPDATE rosters SET team_name = ?, team_tag = ?, created_at = ?, updated_at = ? WHERE roster_id = ?", (team.name, team.tag, team.created, team.updated, team_id,))
 
     for player in team.players:
+        print(player)
         add_to_team(player["steamId"], team_id, player["joinedAt"], player["leftAt"])
 
     return True

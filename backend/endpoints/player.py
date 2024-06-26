@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from services import PlayerService, TeamService
+from services import PlayerService
 
 player_api = Blueprint("player", __name__)
 
@@ -9,7 +9,7 @@ def get_player_(player_id):
     """
     """
     from db.player import insert_player, get_player, get_current_teams, update_player
-    from db.team import insert_team
+    from db.team import insert_teams
 
 
     player = get_player(player_id)
@@ -17,27 +17,19 @@ def get_player_(player_id):
 
     # If player does not exist, scrape it
     if not player:
-        player = PlayerService.scrape_player_data(player_id)
-        if player:
-            insert_player(player)
-        teams = PlayerService.scrape_player_teams(player_id)
-        for team in teams:
-            insert_team(team)
+        insert_player(PlayerService.scrape_player_data(player_id))
+        insert_teams(PlayerService.scrape_player_teams(player_id))
     # If player has not been scraped or the request forces update from source
-    elif player["alias"] is None or force_update:
-        player = PlayerService.scrape_player_data(player_id)
-        update_player(player)
+    elif player.alias is None or force_update:
+        update_player(PlayerService.scrape_player_data(player_id))
 
     # If the player has no registered teams then scrape the player teams
     if not get_current_teams(player_id) or force_update:
-        teams = PlayerService.scrape_player_teams(player_id)
-        for team in teams:
-            insert_team(team)
+        insert_teams(PlayerService.scrape_player_teams(player_id))
 
     player = get_player(player_id)
-    player["currentTeam"] = get_current_teams(player_id)
 
-    return jsonify({'success': True, 'data': player})
+    return jsonify({'success': True, 'data': {**player.serialize()["player"], "currentTeams": get_current_teams(player_id)}})
 
 @player_api.route("/<player_id>/matches")
 def get_player_matches(player_id):
@@ -71,5 +63,4 @@ def get_player_matches(player_id):
 @player_api.route('/<player_id>/teams')
 def get_player_teams(player_id):
     from db.player import get_teams
-    print(player_id)
     return jsonify({'success': True, 'data': get_teams(player_id)})

@@ -225,7 +225,7 @@ class TfDataDecoder(json.JSONDecoder):
             epoch_from_timestamp(team_data.get("createdAt", 0)) or None,
             epoch_from_timestamp(team_data.get("updatedAt", 0)) or None,
             [SiteID.rgl_id(team) for team in team_data.get("linkedTeams", [])],
-            [{"player": player["steamId"], "joinedAt": epoch_from_timestamp(player["joinedAt"]), "leftAt": epoch_from_timestamp(player["leftAt"]) or None} for player in team_data.get("players", [])]
+            [{"steamId": player["steamId"], "joinedAt": epoch_from_timestamp(player["joinedAt"]), "leftAt": epoch_from_timestamp(player["leftAt"]) or None} for player in team_data.get("players", [])]
         )
 
     @staticmethod
@@ -264,7 +264,6 @@ class TfDataDecoder(json.JSONDecoder):
     @staticmethod
     def _decode_internal_player(player_data_: dict) -> Player:
         player_data = player_data_["player"]
-        print(player_data)
         return Player(
             player_data["steamId"],
             player_data.get("displayName", None),
